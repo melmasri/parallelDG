@@ -1,0 +1,73 @@
+#!/usr/bin/env python
+
+import os
+from os.path import basename
+
+import numpy as np
+import json
+import argparse
+from networkx.readwrite import json_graph
+
+import parallelDG.graph.decomposable
+import parallelDG.graph.graph as libg
+from parallelDG.distributions import discrete_dec_log_linear as loglin
+
+
+def main(graph_filename, parameters_filename, data_samples, output_directory, **args):
+    param_filename = basename(parameters_filename)
+    param_basename = os.path.splitext(param_filename)[0]
+
+    filename = basename(graph_filename)
+    graph_basename = os.path.splitext(filename)[0]
+    graph_file = graph_filename
+
+    with open(graph_file) as data_file:
+        json_G = json.load(data_file)
+
+    graph = json_graph.node_link_graph(json_G)
+
+    parameters = loglin.read_local_hyper_consistent_parameters_from_json_file(param_filename)
+
+    with open(filename) as data_file:
+        json_parameters = json.load(data_file)
+
+    no_levels = np.array(json_parameters["no_levels"])
+    levels = [range(l) for l in no_levels]
+
+    table = loglin.locals_to_joint_prob_table(graph, parameters, levels)
+    data = loglin.sample(table, data_samples)
+
+    print data.shape
+    np.savetxt(output_directory+"/"+param_basename +
+               "_n_"+str(data_samples)+".csv",
+               data, delimiter=',', fmt="%i")
+
+    print "wrote"
+    print output_directory+"/"+param_basename +"_n_" + \
+        str(data_samples)+".csv"
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--graph_filename',
+        required=True
+    )
+    parser.add_argument(
+        '--output_directory',
+        required=False, default="."
+    )
+    parser.add_argument(
+        '--parameters_filename',
+        required=True
+    )
+    parser.add_argument(
+        '-n', '--data_samples',
+        required=True
+    )
+    parser.add_argument(
+        '-s', '--seed',
+        type=int, required=True
+    )
+    args = parser.parse_args()
+    main(**args.__dict__)

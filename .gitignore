@@ -1,0 +1,14 @@
+env2.7/
+*.pyc
+*.eps
+*.png
+build/
+dist/
+.DS_Store
+.ipynb_checkpoints/
+.idea/
+env/
+testing_stuff.ipynb
+sandbox/
+sims/
+local_tests/

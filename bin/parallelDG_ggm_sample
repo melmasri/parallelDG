@@ -1,0 +1,107 @@
+#!/usr/bin/env python2.7
+
+import numpy as np
+import pandas as pd
+import parallelDG.parallelDG as ps
+
+def main(trajectory_length,
+         randomize,
+         data_filename,
+         output_directory,
+         deltas=[1.0,],
+         reps=1,
+         seed=None,
+         parallel=True,
+         reset_cache=True,
+         **args):
+
+    if seed is not None:
+        np.random.seed(seed)
+    df = pd.read_csv(data_filename, sep=',', header=None)
+
+    if not isinstance(trajectory_length, list):
+        trajectory_length = list(trajectory_length)
+
+    if not isinstance(randomize, list):
+        randomize = list(randomize)
+
+    if not isinstance(deltas, list):
+        deltas = list(deltas)
+
+    if parallel is True:
+        ps.sample_trajectories_ggm_parallel(df,
+                                            n_samples=trajectory_length,
+                                            randomize=randomize,
+                                            delta=deltas,
+                                            reps=reps,
+                                            reset_cache=reset_cache,
+                                            output_directory=output_directory)
+    else:
+        ps.sample_trajectories_ggm_to_file(df,
+                                           n_samples=trajectory_length,
+                                           randomize=randomize,
+                                           delta=deltas,
+                                           reps=reps,
+                                           reset_cache=reset_cache,
+                                           output_directory=output_directory)
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(
+        "Generate trajectories of decomposable graphs.")
+
+    parser.add_argument('-M',
+                        '--trajectory_length',
+                        type=int,
+                        required=True,
+                        nargs='+',
+                        help="Number of samples")
+
+    parser.add_argument('-R',
+                        '--randomize',
+                        type=int,
+                        required=True,
+                        nargs='+',
+                        help="Steps when junction tree is randomized ")
+
+    parser.add_argument('-d',
+                        '--deltas',
+                        type=float,
+                        required=False,
+                        nargs='+',
+                        help="Delta parameter is the GGM model")
+
+    parser.add_argument(
+        '-f',
+        '--data_filename',
+        required=True,
+        help="Filename of dataset stored as row vectors och floats. ")
+
+    parser.add_argument('-s', '--seed', type=int, required=False, default=None)
+
+    parser.add_argument(
+        '--reps',
+        type=int,
+        required=False,
+        default=1,
+        help='Number of trajectories to sample for each parameter setting')
+
+    parser.add_argument('--parallel',
+                        required=False,
+                        action="store_true",
+                        default=True)
+
+    parser.add_argument('-o',
+                        '--output_directory',
+                        required=False,
+                        default=".",
+                        help="Output directory")
+    parser.add_argument('--reset_cache',
+                        required=False,
+                        default=True,
+                        action="store_true",
+                        help="Reset the cache in each iteration")
+
+    args = parser.parse_args()
+    main(**args.__dict__)
