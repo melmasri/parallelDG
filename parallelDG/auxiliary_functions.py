@@ -170,9 +170,9 @@ def sample_classification_datasets(mus, covmats, n_samples_in_each_class):
         to = sum(n_train[:c + 1])
         x[np.ix_(range(fr, to),
                        range(n_dim))] = np.matrix(np.random.multivariate_normal(
-                                                  np.array(mus[c]).flatten(),
-                                                  covmats[c],
-                                                  n_train[c]))
+                           np.array(mus[c]).flatten(),
+                           covmats[c],
+                           n_train[c]))
         y[np.ix_(range(fr, to), [0])] = np.matrix(np.ones(n_train[c], dtype=int) * c).T
 
     ys = pd.Series(np.array(y).flatten(), dtype=int)
@@ -225,13 +225,14 @@ def plot_multiple_traj_statistics(trajs,
                                   annot=False,
                                   output_directory="./",
                                   file_extension="eps"):
-    trajectories = group_trajectories_by_setting(trajs)
-    # trajectories = trajs
+    # trajectories = group_trajectories_by_setting(trajs)
+    trajectories = trajs
     if not os.path.exists(output_directory):
         os.mkdir(output_directory)
 
     for param_setting, traj_list in trajectories.items():
         #import pdb; pdb.set_trace()
+        import pdb; pdb.set_trace()
         print("Setting: " + str(traj_list[0].sampling_method['method']))
         print("Average sample time: " + str(np.mean(traj_list[0].time)))
 
