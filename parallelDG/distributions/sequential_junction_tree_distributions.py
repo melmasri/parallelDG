@@ -1,5 +1,5 @@
 """
-Junction tree distributions suitable for SMC sampling.
+Junction tree distributions suitable for sampling.
 """
 
 import numpy as np

@@ -225,8 +225,8 @@ def plot_multiple_traj_statistics(trajs,
                                   annot=False,
                                   output_directory="./",
                                   file_extension="eps"):
-    # trajectories = group_trajectories_by_setting(trajs)
-    trajectories = trajs
+    trajectories = group_trajectories_by_setting(trajs)
+    # trajectories = trajs
     if not os.path.exists(output_directory):
         os.mkdir(output_directory)
 
