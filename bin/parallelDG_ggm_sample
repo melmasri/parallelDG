@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-import parallelDG.parallelDG as ps
+import parallelDG.mh_parallel as pdg
 
 def main(trajectory_length,
          randomize,
@@ -29,21 +29,21 @@ def main(trajectory_length,
         deltas = list(deltas)
 
     if parallel is True:
-        ps.sample_trajectories_ggm_parallel(df,
+        pdg.sample_trajectories_ggm_parallel(df,
+                                             n_samples=trajectory_length,
+                                             randomize=randomize,
+                                             delta=deltas,
+                                             reps=reps,
+                                             reset_cache=reset_cache,
+                                             output_directory=output_directory)
+    else:
+        pdg.sample_trajectories_ggm_to_file(df,
                                             n_samples=trajectory_length,
                                             randomize=randomize,
                                             delta=deltas,
                                             reps=reps,
                                             reset_cache=reset_cache,
                                             output_directory=output_directory)
-    else:
-        ps.sample_trajectories_ggm_to_file(df,
-                                           n_samples=trajectory_length,
-                                           randomize=randomize,
-                                           delta=deltas,
-                                           reps=reps,
-                                           reset_cache=reset_cache,
-                                           output_directory=output_directory)
 
 
 if __name__ == "__main__":
