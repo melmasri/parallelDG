@@ -10,6 +10,7 @@ import seaborn as sns
 from pandas.plotting import autocorrelation_plot
 from tqdm import tqdm
 import random
+import datetime
 
 from sys import platform as sys_pf
 if sys_pf == 'darwin':
@@ -368,3 +369,16 @@ def plot_graph_traj_statistics(graph_traj, write_to_file=False):
     if write_to_file:
         plt.savefig(str(graph_traj)+"_MAP.png")
     plt.clf()
+
+
+
+def write_traj_to_file(graph_trajectory, dir):
+    date = datetime.datetime.today().strftime('%Y%m%d%H%m%S')
+    if not os.path.exists(dir):
+        os.mkdir(dir)
+
+    filename = dir + "/" + str(graph_trajectory) + "_" + date + ".json"
+
+    graph_trajectory.write_file(filename=filename)
+    print("wrote file: " + filename)
+ 

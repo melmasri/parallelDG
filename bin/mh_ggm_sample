@@ -7,17 +7,30 @@ import pandas as pd
 
 from parallelDG import mh_greenthomas
 
-def main(trajectory_length, data_filename, seed, randomize, reps, parallel, output_directory, **args):
+def main(trajectory_length,
+         data_filename,
+         seed,
+         randomize,
+         reps,
+         parallel,
+         output_directory,
+         **args):
     if seed is not None:
         np.random.seed(seed)
 
     df = pd.read_csv(data_filename, sep=',', header=None)
     if parallel is True:
-        mh_greenthomas.sample_trajectories_ggm_parallel(df, trajectory_length, randomize=randomize, reps=reps,
+        mh_greenthomas.sample_trajectories_ggm_parallel(df,
+                                                        trajectory_length,
+                                                        randomize=randomize,
+                                                        reps=reps,
                                                         output_directory=output_directory)
     else:
-        mh_greenthomas.sample_trajectories_ggm_to_file(df, trajectory_length, randomize=randomize, reps=reps,
-                                               output_directory=output_directory)
+        mh_greenthomas.sample_trajectories_ggm_to_file(df,
+                                                       trajectory_length,
+                                                       randomize=randomize,
+                                                       reps=reps,
+                                                       output_directory=output_directory)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -52,7 +65,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         '--parallel',
-        required=False, action="store_true", default=False
+        required=False, action="store_true", default=True
     )
 
     args = parser.parse_args()

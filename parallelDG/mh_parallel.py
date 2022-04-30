@@ -17,6 +17,7 @@ import parallelDG.graph.trajectory as mcmctraj
 import parallelDG.graph.decomposable as dlib
 import parallelDG.graph.parrallel_moves as ndlib
 import networkx as nx
+import parallelDG.auxiliary_functions as aux
 
 # starting MCMC sampler
 def sample_trajectory(n_samples,
@@ -220,7 +221,7 @@ def sample_trajectories_ggm_parallel(dataframe,
     if "output_directory" in args:
         dir = args["output_directory"]
         for traj in rets:
-            write_to_file(traj, dir)
+            aux.write_traj_to_file(traj, dir)
     return rets
 
 
@@ -307,7 +308,7 @@ def sample_trajectories_loglin_parallel(dataframe,
     if "output_directory" in args:
         dir = args["output_directory"]
         for traj in rets:
-            write_to_file(traj, dir)
+            aux.write_traj_to_file(traj, dir)
     return rets
 
         
@@ -334,21 +335,11 @@ def trajectory_to_file(n_samples,
     #print (n_particles, alpha, beta, radius, n_samples, str(seqdist), reset_cache)
     graph_trajectory = sample_trajectory(n_samples, randomize,
                                          seqdist, reset_cache=reset_cache)
-    write_to_file(graph_trajectory, dir)
+    aux.write_traj_to_file(graph_trajectory, dir)
 
     return graph_trajectory
 
-
-def write_to_file(graph_trajectory, dir):
-    date = datetime.datetime.today().strftime('%Y%m%d%H%m%S')
-    if not os.path.exists(dir):
-        os.mkdir(dir)
-
-    filename = dir + "/" + str(graph_trajectory) + "_" + date + ".json"
-
-    graph_trajectory.write_file(filename=filename)
-    print("wrote file: " + filename)
-   
+  
 
 def trajectory_to_queue(n_samples,
                         randomize,

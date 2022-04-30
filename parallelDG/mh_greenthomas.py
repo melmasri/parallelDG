@@ -351,8 +351,13 @@ def sample_trajectories_ggm_to_file(dataframe, n_samples, randomize=[1000], D=No
     return graph_trajectories
 
 
-def sample_trajectories_ggm_parallel(dataframe, n_samples, randomize=[1000], D=None, delta=1.0,
-                                     reps=1, output_directory=".", **args):
+def sample_trajectories_ggm_parallel(dataframe,
+                                     n_samples,
+                                     randomize=[1000],
+                                     D=None,
+                                     delta=1.0,
+                                     reps=1,
+                                     **args):
     p = dataframe.shape[1]
     if D is None:
         D = np.identity(p)
@@ -381,4 +386,8 @@ def sample_trajectories_ggm_parallel(dataframe, n_samples, randomize=[1000], D=N
     for p in processes:
         p.join()
 
+    if "output_directory" in args:
+        dir = args["output_directory"]
+        for traj in rets:
+            aux.write_traj_to_file(traj, dir)
     return rets
