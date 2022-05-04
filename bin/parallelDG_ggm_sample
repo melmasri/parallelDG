@@ -78,8 +78,6 @@ if __name__ == "__main__":
         required=True,
         help="Filename of dataset stored as row vectors och floats. ")
 
-    parser.add_argument('-s', '--seed', type=int, required=False, default=None)
-
     parser.add_argument(
         '--reps',
         type=int,

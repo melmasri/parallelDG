@@ -372,12 +372,12 @@ def plot_graph_traj_statistics(graph_traj, write_to_file=False):
 
 
 
-def write_traj_to_file(graph_trajectory, dir):
+def write_traj_to_file(graph_trajectory, dirt):
     date = datetime.datetime.today().strftime('%Y%m%d%H%m%S')
-    if not os.path.exists(dir):
-        os.mkdir(dir)
+    if not os.path.exists(dirt):
+        os.makedirs(dirt)
 
-    filename = dir + "/" + str(graph_trajectory) + "_" + date + ".json"
+    filename = dirt + "/" + str(graph_trajectory) + "_" + date + ".json"
 
     graph_trajectory.write_file(filename=filename)
     print("wrote file: " + filename)
