@@ -11,7 +11,7 @@ def main(trajectory_length,
          deltas=[1.0,],
          reps=1,
          seed=None,
-         parallel=True,
+         parallel=False,
          reset_cache=True,
          **args):
 
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     parser.add_argument('--parallel',
                         required=False,
                         action="store_true",
-                        default=True)
+                        default=False)
 
     parser.add_argument('-o',
                         '--output_directory',
