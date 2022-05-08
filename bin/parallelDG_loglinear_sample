@@ -14,9 +14,9 @@ import parallelDG.mh_parallel as ps
 def main(data_filename,
          trajectory_length,
          randomize,
-         pseudo_observations,
+         pseudo_obs,
          seed,
-         parallel=True,
+         parallel=False,
          output_directory=".",
          reset_cache=True,
          reps=1,
@@ -33,14 +33,14 @@ def main(data_filename,
     if not isinstance(randomize, list):
         randomize = list(randomize)
 
-    if not isinstance(pseudo_observations, list):
-        pseudo_observations = list(pseudo_observations)
+    if not isinstance(pseudo_obs, list):
+        pseudo_obs = list(pseudo_obs)
 
     if parallel:
         ps.sample_trajectories_loglin_parallel(df,
                                                n_samples=trajectory_length,
                                                randomize=randomize,
-                                               pseudo_obs=pseudo_observations,
+                                               pseudo_obs=pseudo_obs,
                                                reset_cache=True,
                                                reps=reps,
                                                output_directory=output_directory)
@@ -48,7 +48,7 @@ def main(data_filename,
         ps.sample_trajectories_loglin_to_file(df,
                                               n_samples=trajectory_length,
                                               randomize=randomize,
-                                              pseudo_obs=pseudo_observations,
+                                              pseudo_obs=pseudo_obs,
                                               reset_cache=True,
                                               reps=reps,
                                               output_directory=output_directory)
@@ -81,7 +81,7 @@ if __name__ == "__main__":
         type=int, required=False, default=None
     )
     parser.add_argument(
-        '--pseudo_observations',
+        '--pseudo_obs',
         type=float, required=False, default=[1.0], nargs='+',
         help="Total number of pseudo observations"
     )
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         '--parallel',
-        required=False, action="store_true", default=True,
+        required=False, action="store_true", default=False,
         help="run MCMC on parallel processes."
     )
     parser.add_argument(
