@@ -30,7 +30,6 @@ graph_trajs = pdg.sample_trajectories_loglin_parallel(dataframe=aw_df,
                                                       randomize=[100],
                                                       reset_cache=False,
                                                       reps=2)
-graph_trajs.items()
 
 aux.plot_multiple_traj_statistics(graph_trajs,
                                   0,
@@ -96,40 +95,4 @@ aux.plot_multiple_traj_statistics(graph_trajs,
                                   0,
                                   write_to_file=True,
                                   output_directory="./ar_1-5_trajs_green/")
-
-
-
-# Random graph GGM
-random.seed(2)
-np.random.seed(3)
-p = 30
-graph = dlib.sample(p)
-agraph = nx.nx_agraph.to_agraph(graph)
-agraph.draw("./randomgraph/agraph.eps", prog="circo")
-plt.clf()
-
-aux.plot_heatmap(nx.to_numpy_array(graph),
-                         xticklabels=np.arange(1, p +1),
-                         yticklabels=np.arange(1, p +1), annot=False)
-
-sns.set_style("whitegrid")
-
-plt.savefig("./randomgraph/adjmat.eps")
-plt.clf()
-
-prec_mat = aux.gen_prec_mat(graph, 0.5)
-cov_mat = np.matrix(prec_mat).I
-df = pd.DataFrame(np.random.multivariate_normal(np.zeros(p), cov_mat, 100))
-
-# Parallel MH algorithm
-graph_trajs = pdg.sample_trajectories_ggm_parallel(dataframe=df,
-                                                   n_samples=[10000],
-                                                   randomize=[100],
-                                                   reset_cache=True,
-                                                   reps=2)
-
-aux.plot_multiple_traj_statistics(graph_trajs,
-                                  0,
-                                  write_to_file=True,
-                                  output_directory="./randomgraph/")
 
