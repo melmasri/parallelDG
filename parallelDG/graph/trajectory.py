@@ -29,7 +29,6 @@ class Trajectory:
         self._size = []
         self._jtsize = []
         self.n_updates = 0
-        self.trajectory_type = 'junction_tree'
         self.jt_updates = []    # format [(move_type(0,1, node, new_clique, old_clique, iteration #))]
         self.graph_updates = []  # format [(edge, edge, movetype(0,1)),] 0 disconnect, 1 connect
         self.init_graph = None
@@ -89,7 +88,7 @@ class Trajectory:
             else:
                 g += pmlib.jt_to_graph_disconnect_move(m[3], m[4], m[1], m[5])
         self.set_graph_updates(g)
-        return self.graph_updates
+
 
     def set_graph_trajectories(self):
         if not self.graph_updates:
@@ -213,18 +212,6 @@ class Trajectory:
             with open(filename, 'w') as outfile:
                 json.dump(self.to_json(optional=optional), outfile, default=default)
 
-    def get_adjvec_trajectory(self):
-        mats = []
-        if self.trajectory_type == "junction_tree":
-            for graph in self.trajectory:
-                m = nx.to_numpy_array(jtlib.graph(graph), dtype=int)
-                mats.append(m.flatten().tolist())
-        else:
-            for graph in self.trajectory:
-                m = nx.to_numpy_array(graph, dtype=int)
-                mats.append(m.flatten().tolist())
-        return mats
-
     def graph_diff_trajectory_df(self):
 
         def list_to_string(edge_list):
@@ -238,117 +225,97 @@ class Trajectory:
         added = []
         removed = []
 
-        for i in range(1, self.trajectory[0].order()):
+        for i in range(1, self.init_graph.order()):
             added += [(0, i)]
         
-        df = pd.DataFrame({"index": [-2],
-                           "added": [list_to_string(added)],
-                           "removed": [list_to_string([])],
-                           "score": [0]})
-
-        
-
-        df2 = pd.DataFrame({"index": [-1],
+        df0 = pd.DataFrame({"index": [-2],
+                            "added": [list_to_string(added)],
+                            "removed": [list_to_string([])],
+                            "score": [0]})
+        df1 = pd.DataFrame({"index": [-1],
                             "added": [list_to_string([])],
                             "removed": [list_to_string(added)],
                             "score": [0]})
+        df2 = df0.append(df1)
 
-        df = df.append(df2)
-        if self.trajectory_type == "junction_tree":
-            added = jtlib.graph(self.trajectory[0]).edges()
-        else:
-            added = self.trajectory[0].edges()
-        removed = []
+        if not self.graph_updates:
+            self.jt_to_graph_updates()
 
-        df2 = pd.DataFrame({"index": [0],
-                            "added": [list_to_string(added)],
-                            "removed": [list_to_string([])],
-                            "score": [self.log_likelihood()[0]]})
-        df = df.append(df2)
+        output = pd.DataFrame(self.graph_updates,
+                              columns=['e1', 'e2', 'move_type', 'index'])
+        output['edge_tupple'] = output[["e1","e2"]].apply(tuple, axis=1)
+        formated_output = output.groupby(['move_type',
+                                          'index'])['edge_tupple'].apply(
+                                              list_to_string).reset_index(
+                                                  name='edges')
 
-        if self.trajectory_type == "junction_tree":
-            for i in range(1, len(self.trajectory[1:-1])):
-                g_cur = jtlib.graph(self.trajectory[i])
-                g_prev = jtlib.graph(self.trajectory[i-1])
+        added = formated_output[output['move_type'] == 0].rename(
+            columns={"edges": "added",
+                     "index": "index"})
 
-                if glib.hash_graph(g_cur) != glib.hash_graph(g_prev):
-                    added = list(set(g_cur.edges()) - set(g_prev.edges()))
-                    removed = list(set(g_prev.edges()) - set(g_cur.edges()))       
-                    df2 = pd.DataFrame({"index": [i],
-                                        "added": [list_to_string(added)],
-                                        "removed": [list_to_string(removed)],
-                                        "score": [self.log_likelihood()[i]]})
-                    df = df.append(df2)
-        else:
-            for i in range(1, len(self.trajectory[1:-1])):
-                g_cur = self.trajectory[i]
-                g_prev = self.trajectory[i-1]
+        removed = formated_output[output['move_type'] == 1].rename(
+            columns={"edges": "removed",
+                     "index": "index"})
 
-                if glib.hash_graph(g_cur) != glib.hash_graph(g_prev):
-                    added = list(set(g_cur.edges()) - set(g_prev.edges()))
-                    removed = list(set(g_prev.edges()) - set(g_cur.edges()))
-                    df2 = pd.DataFrame({"index": [i],
-                                        "added": [list_to_string(added)],
-                                        "removed": [list_to_string(removed)],
-                                        "score": [self.log_likelihood()[i]]})
-                    df = df.append(df2)
-        return df
+        removed['added'] = None
+        added['removed'] = None
 
-    def write_adjvec_trajectory(self, filename):
-        """ Writes the trajectory of adjacency matrices to file.
-        """
-        mats = self.get_adjvec_trajectory()
-        with open(filename, 'w') as outfile:
-                json.dump(mats, outfile)
+        _cols = ['added', 'index', 'removed']
+        df = added[_cols].append(removed[_cols]).sort_values(
+            by='index'
+        ).fillna('[]')
+        #  getting loglikelihood
+        score = pd.DataFrame({
+            'index': range(len(self.logl)),
+            'score': self.logl
+        })
+
+        final_df = df.merge(score)
+
+        return df2.append(final_df)
+
     
-                
     def to_json(self, optional={}):
-        js_graphs = [json_graph.node_link_data(graph) for
-                     graph in self.trajectory]
-
         mcmc_traj = {"model": self.seqdist.get_json_model(),
                      "run_time": self.time,
                      "optional": optional,
                      "sampling_method": self.sampling_method,
-                     "trajectory": js_graphs,
                      "n_updates": self.n_updates,
-                     "trajectory_type": self.trajectory_type
+                     "graph_updates": self.graph_updates,
+                     "jt_updates": self.jt_updates,
+                     "init_graph": json_graph.node_link_data(self.init_graph)
                      }
         return mcmc_traj
 
 
     def from_json(self, mcmc_json):
-        graphs = [
-            jtlib.to_frozenset(json_graph.node_link_graph(js_graph))
-            for js_graph in mcmc_json["trajectory"]]
-
-        self.set_trajectory(graphs)
         self.set_time(mcmc_json["run_time"])
         self.sampling_method = mcmc_json["sampling_method"]
         self.n_updates = mcmc_json['n_updates']
         self.optional = mcmc_json["optional"]
-        self.trajectory_type = mcmc_json["trajectory_type"]
-
+        self.init_graph = jtlib.to_frozenset(
+            json_graph.node_link_graph(
+                mcmc_json['init_graph']))
+        self.seqdist.init_model_from_json(mcmc_json["model"])
+        self.n_updates = mcmc_json['n_updates']
+        self.set_graph_updates(mcmc_json['graph_updates'])
+        self.set_jt_updates(mcmc_json['jt_updates'])
+        
         if mcmc_json["model"]["name"] == "ggm_jt_post":
             self.seqdist = sd.GGMJTPosterior()
         elif mcmc_json["model"]["name"] == "loglin_jt_post":
             self.seqdist = sd.LogLinearJTPosterior()
 
-        self.seqdist.init_model_from_json(mcmc_json["model"])
 
     def read_file(self, filename):
         """ Reads a trajectory from json-file.
         """
         with open(filename) as mcmc_file:
             mcmc_json = json.load(mcmc_file)
-
         self.from_json(mcmc_json)
 
     def __str__(self):
-        if self.sampling_method["method"] == "pgibbs":
-            return "pgibbs_graph_trajectory_" + str(self.seqdist) + "_length_" + str(len(self.trajectory)) + \
-            "_N_" + str(self.sampling_method["params"]["N"])
-        elif self.sampling_method["method"] == "mh":
-            return "mh_graph_trajectory_" + str(self.seqdist) + "_length_" + str(len(self.trajectory)) + \
-                "_randomize_interval_" + str(self.sampling_method["params"]["randomize_interval"])
+        self.sampling_method["method"] == "mh":
+        return "mh_graph_trajectory_" + str(self.seqdist) + "_length_" +        str(len(self.trajectory)) + \
+            "_randomize_interval_" + str(self.sampling_method["params"]["randomize_interval"])
 
