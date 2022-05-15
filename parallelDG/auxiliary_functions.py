@@ -226,14 +226,13 @@ def plot_multiple_traj_statistics(trajs,
                                   annot=False,
                                   output_directory="./",
                                   file_extension="eps"):
-    # trajectories = group_trajectories_by_setting(trajs)
-    trajectories = trajs
+    trajectories = group_trajectories_by_setting(trajs)
+    #trajectories = trajs
     if not os.path.exists(output_directory):
         os.mkdir(output_directory)
 
     for param_setting, traj_list in trajectories.items():
         #import pdb; pdb.set_trace()
-        import pdb; pdb.set_trace()
         print("Setting: " + str(traj_list[0].sampling_method['method']))
         print("Average sample time: " + str(np.mean(traj_list[0].time)))
 
@@ -372,13 +371,17 @@ def plot_graph_traj_statistics(graph_traj, write_to_file=False):
 
 
 
-def write_traj_to_file(graph_trajectory, dirt):
+def write_traj_to_file(graph_trajectory,
+                       dirt,
+                       output_filename="trajectory.csv"):
     date = datetime.datetime.today().strftime('%Y%m%d%H%m%S')
     if not os.path.exists(dirt):
         os.makedirs(dirt)
 
-    filename = dirt + "/" + str(graph_trajectory) + "_" + date + ".json"
+    filename = dirt + "/"+output_filename
+    df = graph_trajectory.graph_diff_trajectory_df()
+    df.to_csv(filename, sep=",", index=False)
 
-    graph_trajectory.write_file(filename=filename)
+    #graph_trajectory.write_file(filename=filename)
     print("wrote file: " + filename)
  

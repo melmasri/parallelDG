@@ -15,7 +15,7 @@ import parallelDG.graph.graph as glib
 import parallelDG.graph.junction_tree as jtlib
 import parallelDG.graph.trajectory as mcmctraj
 import parallelDG.graph.decomposable as dlib
-import parallelDG.graph.parrallel_moves as ndlib
+import parallelDG.graph.parallel_moves as ndlib
 import networkx as nx
 import parallelDG.auxiliary_functions as aux
 
@@ -41,7 +41,7 @@ def sample_trajectory(n_samples,
     jt.latent = True
     jt_traj = [None] * n_samples
     ## graphs = [None] * n_samples
-    jt_traj[0] = jt
+    jt_traj[0] = jt.copy()
     ## graphs[0] = jtlib.graph(jt)
     log_prob_traj = [None] * n_samples
 
@@ -54,71 +54,70 @@ def sample_trajectory(n_samples,
                                "params": {"samples": n_samples,
                                           "randomize_interval": randomize}
                                })
-
     gtraj.set_sequential_distribution(sd)
-
+    gtraj.set_init_graph(graph)
+    
     log_prob_traj[0] = 0.0
     log_prob_traj[0] = sd.log_likelihood(jtlib.graph(jt_traj[0]))
     # log_prob_traj[0] += -jtlib.log_n_junction_trees(jt_traj[0],
     #                                                 jtlib.separators(jt_traj[0]))
     ## accept_traj = [0] * n_samples
+    update_moves = list()
     num_nodes = len(graph)
     k = 0.0
     tic = time.time()
     for i in tqdm(range(1, n_samples), desc="Metropolis-Hastings samples"):
         if i % randomize == 0:
-            #jt = dlib.junction_tree(jtlib.graph(jt))
             jtlib.randomize(jt)
-            # graphs[i] = jtlib.graph(jt)  # TODO: Improve.
-            # log_prob_traj[i] = sd.log_likelihood(graphs[i])
-        # A move
+            # A move
         node = frozenset([np.random.randint(num_nodes)])
         move_type = np.random.randint(2)
-        
+      
         log_p = 0
         if move_type == 0:          # connect
             #new_cliques, log_q12, N, k = ndlib.propose_connect_moves(jt,node)
-
             new_moves = ndlib.paritioned_connect_moves(jt, node, True)
-            for cl1, cl2_list in new_moves.iteritems():
-                for cl2 in cl2_list:
-                    cl2_new = cl2 | node
-                    if cl2_new in jt:
+            for anchor_cl, possible_cl_list in new_moves.iteritems():
+                for possible_cl in possible_cl_list:
+                    cl_new = possible_cl | node
+                    if cl_new in jt:
                         continue
-                    sp_new = cl1 & cl2_new
-                    sp = cl1 & cl2
+                    sp_new = anchor_cl & cl_new
+                    sp = anchor_cl & possible_cl
                     # New clique log-lik + prior
-                    log_p2 = sd.log_likelihood_partial(cliques=[cl2_new],
-                                                       separators={sp_new: set([(cl1, cl2_new)])})
-                    log_g2 = log_exponentail_markov_law(cli_hyper_param, cl2_new) \
+                    log_p2 = sd.log_likelihood_partial(cliques=[cl_new],
+                                                       separators={sp_new: set([(anchor_cl, cl_new)])})
+                    log_g2 = log_exponentail_markov_law(cli_hyper_param, cl_new) \
                         - log_exponentail_markov_law(sep_hyper_param, sp_new)
                     # old clique log-like + prior
-                    log_p1 = sd.log_likelihood_partial([cl2], {sp: set([(cl1, cl2)])})
-                    log_g1 = log_exponentail_markov_law(cli_hyper_param, cl2) \
+                    log_p1 = sd.log_likelihood_partial([possible_cl], {sp: set([(anchor_cl, possible_cl)])})
+                    log_g1 = log_exponentail_markov_law(cli_hyper_param, possible_cl) \
                         - log_exponentail_markov_law(sep_hyper_param, sp)
                     ## update probability
                     alpha = min(1, np.exp(log_p2 + log_g2 - log_p1 - log_g1))
                     k += 1
                     if np.random.uniform() <= alpha:
-                        ndlib.connect(jt, cl2, cl2_new, cl1)
+                        ndlib.connect(jt, possible_cl, cl_new, anchor_cl)
                         log_p += (log_p2 - log_p1)
+                        update_moves.append((move_type, node, cl_new, possible_cl, anchor_cl,i))
+                        
                         
         else:                       # diconnect
             new_moves = ndlib.paritioned_disconnect_moves(jt, node)
-            for cl, conn in new_moves.iteritems():
-                if conn:
-                    sp = cl & conn
+            for cl, anchor_cl in new_moves.iteritems():
+                if anchor_cl:
+                    sp = cl & anchor_cl
                     cl_new = cl - node
                     if cl_new in jt:
                         continue
-                    sp_new = cl_new & conn
+                    sp_new = cl_new & anchor_cl
                     ## New clique log-lik + prior
                     log_p2 = sd.log_likelihood_partial([cl_new],
-                                                       {sp_new:set([(conn, cl_new)])})
+                                                       {sp_new:set([(anchor_cl, cl_new)])})
                     log_g2 = log_exponentail_markov_law(cli_hyper_param, cl_new) \
                         - log_exponentail_markov_law(sep_hyper_param, sp_new)
                     ## old clique + prior
-                    log_p1 = sd.log_likelihood_partial([cl], {sp: set([(conn, cl)])})
+                    log_p1 = sd.log_likelihood_partial([cl], {sp: set([(anchor_cl, cl)])})
                     log_g1 = log_exponentail_markov_law(cli_hyper_param, cl) \
                         - log_exponentail_markov_law(sep_hyper_param, sp)
                     alpha = min(1, np.exp(log_p2 + log_g2 - log_p1 - log_g1))
@@ -126,21 +125,19 @@ def sample_trajectory(n_samples,
                     if np.random.uniform() <= alpha:
                         ndlib.disconnect(jt, cl, cl_new)
                         log_p += (log_p2 - log_p1)
+                        update_moves.append((move_type, node, cl_new, cl, anchor_cl, i))
 
-        #accept_traj[i] = 1
-        # graphs[i] = jtlib.graph(jt)  # TODO: Improve.
-        jt_traj[i] = jt.copy()
-        #log_prob_traj[i] = sd.log_likelihood(graphs[i])
         log_prob_traj[i] = log_prob_traj[i-1] + log_p
-        # if np.abs(log_prob_traj[i-1] + log_p - log_prob_traj[i]) > 1e-4:
-        #     import pdb; pdb.set_trace()
+        # jt_traj[i] = jt.copy()
+
     toc = time.time()
-    # gtraj.set_trajectory(graphs)
-    gtraj.set_trajectory(jt_traj)
-    gtraj.n_updates = k
-    gtraj.logl = log_prob_traj
+    gtraj.set_logl(log_prob_traj)
+    gtraj.set_nupdates(k)
     gtraj.set_time(toc-tic)
-    print('Total of {} updates, for an average of {:.2f} per iteration'.format(k, k/n_samples))
+    gtraj.set_jt_updates(update_moves)
+    
+
+    print('Total of {} updates, for an average of {:.2f} per iteration or {:.2f}updates/sece'.format(k, k/n_samples,k/(toc-tic)))
     return gtraj
 
 

@@ -6,7 +6,6 @@ import numpy as np
 import networkx as nx
 import parallelDG.graph.decomposable
 from parallelDG.distributions import wishart as wish
-import parallelDG.graph.graph as glib
 import parallelDG.graph.junction_tree as jtlib
 
 
@@ -44,7 +43,11 @@ def gaussian_marginal_log_likelihood(S, n, D, delta, cache={}):
     return c1 - c2
 
 
-def log_likelihood_partial(S, n, D, delta, cliques, separators, cache={}, idmatrices=None):
+def log_likelihood_partial(S, n, D, delta,
+                           cliques,
+                           separators,
+                           cache={},
+                           idmatrices=None):
     """ Partial log-likelihood of the given cliques and separators.
     If every clique and separator is found in a graph, g this is
     the marginal likelihood of g.
@@ -65,7 +68,11 @@ def log_likelihood_partial(S, n, D, delta, cliques, separators, cache={}, idmatr
             inds = np.array(list(c), dtype=int).tolist()
             D_c = D[inds][:, inds]
             S_c = S[inds][:, inds]
-            cache[c] = gaussian_marginal_log_likelihood(S_c, n, D_c, delta, cache)
+            cache[c] = gaussian_marginal_log_likelihood(S_c,
+                                                        n,
+                                                        D_c,
+                                                        delta,
+                                                        cache)
         cliques_constants += cache[c]
     seps_constants = 0.0
     for s in separators:

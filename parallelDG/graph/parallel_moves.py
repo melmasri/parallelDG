@@ -188,31 +188,28 @@ def propose_disconnect_moves(tree, node, *cache):
 
 
 def disconnect(tree, old_clique, new_clique):
-    if new_clique not in tree:
-        if len(new_clique) != 0:     # in case of an empty tree-node
-            tree.add_node(new_clique)
-            edges_to_add = [(new_clique, y) for y in tree.neighbors(old_clique)
-                            if y != new_clique]
-            tree.add_edges_from(edges_to_add)
-            tree.remove_node(old_clique)
-        else:
-            if tree.degree(old_clique) != 1:
-                # select a maximal clique
-                for nei in tree.neighbors(old_clique):
-                    if old_clique < nei:
-                        edges_to_add = [(nei, y)
-                                        for y in tree.neighbors(old_clique)
-                                        if y != nei]
-                        break
-                tree.add_edges_from(edges_to_add)
-            tree.remove_node(old_clique)
-        if not tree.latent:
-            update_tree(tree, new_clique)
+    if len(new_clique) != 0:     # in case of an empty tree-node
+        edges_to_add = [(new_clique, y) for y in tree.neighbors(old_clique)]
+        tree.add_node(new_clique)
+        tree.add_edges_from(edges_to_add)
+        tree.remove_node(old_clique)
     else:
-        print('node in tree -- disconnect {}'.format(new_clique))
+        if tree.degree(old_clique) != 1:
+            # select a maximal clique
+            for nei in tree.neighbors(old_clique):
+                if old_clique < nei:
+                    edges_to_add = [(nei, y)
+                                    for y in tree.neighbors(old_clique)
+                                    if y != nei]
+                    break
+            tree.add_edges_from(edges_to_add)
+        tree.remove_node(old_clique)
+    if not tree.latent:
+        update_tree(tree, new_clique)
 
 
-def connect(tree, old_clique, new_clique, connector_node=None):
+        
+def connect(tree, old_clique, new_clique, anchor_clique=None):
     if new_clique not in tree:
         tree.add_node(new_clique)
         # import pdb; pdb.set_trace()
@@ -222,7 +219,7 @@ def connect(tree, old_clique, new_clique, connector_node=None):
             tree.remove_node(old_clique)
             tree.add_edges_from(edges_to_add)
         else:  # empty clique-node
-            edges_to_add = [(new_clique, connector_node)]
+            edges_to_add = [(new_clique, anchor_clique)]
             tree.add_edges_from(edges_to_add)
         if not tree.latent:
             update_tree(tree, new_clique)
@@ -306,3 +303,36 @@ def revert_moves(tree, node, cliques):
                 T = jtlib.subtree_induced_by_subset(tree, node)
                 conn = list(T.nodes() - cliques)[0]
                 connect(tree, nd, X, conn)
+
+
+def jt_to_graph_connect_move(old_clique,
+                             new_clique,
+                             node,
+                             i=None):
+    simplix = new_clique - node
+    node = list(node)[0]
+    # 0 for connection tyep
+    edges_to_add = [(node, y, 0, i) for y in set(simplix)]
+    return edges_to_add
+
+def jt_to_graph_disconnect_move(old_clq,
+                                anchor_clq,
+                                node,
+                                i=None):
+    simplix = old_clq - anchor_clq
+    node = list(node)[0]
+    # 1 for disconnect type
+    edges_to_remove = [(node, y, 1, i) for y in set(simplix)]
+    return edges_to_remove
+
+
+
+def is_isomorphic(jt_traj, graph_traj, graph_updates):
+    """ Test isomphisim between graph and jt trajectories"""
+    indx = [x[5] for x in graph_updates]
+    for k in np.where(np.diff(indx) != 0)[0]:
+        x = graph_updates[k]
+        j = x[5]
+        if not nx.is_isomorphic(jtlib.graph(jt_traj[j]), graph_traj[k+1]):
+            print("{}, {}".format(k, j))
+            break
