@@ -24,7 +24,8 @@ def sample_trajectory(n_samples,
                       randomize,
                       sd,
                       init_graph=None,
-                      reset_cache=True):
+                      reset_cache=True,
+                      **args):
     if init_graph:
         graph = init_graph
     else:   
@@ -55,13 +56,10 @@ def sample_trajectory(n_samples,
                                           "randomize_interval": randomize}
                                })
     gtraj.set_sequential_distribution(sd)
-    gtraj.set_init_graph(graph)
+    gtraj.set_init_graph(graph)  # don't make this a frozenset
     
     log_prob_traj[0] = 0.0
-    log_prob_traj[0] = sd.log_likelihood(jtlib.graph(jt_traj[0]))
-    # log_prob_traj[0] += -jtlib.log_n_junction_trees(jt_traj[0],
-    #                                                 jtlib.separators(jt_traj[0]))
-    ## accept_traj = [0] * n_samples
+    log_prob_traj[0] = sd.log_likelihood(jt_traj[0])
     update_moves = list()
     num_nodes = len(graph)
     k = 0.0
@@ -99,7 +97,9 @@ def sample_trajectory(n_samples,
                     if np.random.uniform() <= alpha:
                         ndlib.connect(jt, possible_cl, cl_new, anchor_cl)
                         log_p += (log_p2 - log_p1)
-                        update_moves.append((move_type, node, cl_new, possible_cl, anchor_cl,i))
+                        update_moves.append((i, move_type, node, (cl_new,
+                                                                  possible_cl,
+                                                                  anchor_cl)))
                         
                         
         else:                       # diconnect
@@ -125,7 +125,9 @@ def sample_trajectory(n_samples,
                     if np.random.uniform() <= alpha:
                         ndlib.disconnect(jt, cl, cl_new)
                         log_p += (log_p2 - log_p1)
-                        update_moves.append((move_type, node, cl_new, cl, anchor_cl, i))
+                        update_moves.append((i, move_type, node, (cl_new,
+                                                                  cl,
+                                                                  anchor_cl)))
 
         log_prob_traj[i] = log_prob_traj[i-1] + log_p
         # jt_traj[i] = jt.copy()
@@ -135,7 +137,7 @@ def sample_trajectory(n_samples,
     gtraj.set_nupdates(k)
     gtraj.set_time(toc-tic)
     gtraj.set_jt_updates(update_moves)
-    
+    #gtraj.jt_trajectory = jt_traj
 
     print('Total of {} updates, for an average of {:.2f} per iteration or {:.2f}updates/sece'.format(k, k/n_samples,k/(toc-tic)))
     return gtraj
@@ -175,7 +177,8 @@ def sample_trajectories_ggm_to_file(dataframe,
                                                           randomize=r,
                                                           seqdist=sd,
                                                           reset_cache=reset_cache,
-                                                          dir=output_directory)
+                                                          output_directory=output_directory,
+                                                          **args)
                     graph_trajectories.append(graph_trajectory)
     return graph_trajectories
 
@@ -215,10 +218,21 @@ def sample_trajectories_ggm_parallel(dataframe,
     for p in processes:
         p.join()
 
+    output_directory = './'
+    output_filename = output_format = None
     if "output_directory" in args:
-        dir = args["output_directory"]
-        for traj in rets:
-            aux.write_traj_to_file(traj, dir)
+        output_directory = args["output_directory"]
+    if "output_filename" in args:
+        output_filename = args["output_filename"]
+    if "output_format" in args:
+        output_format = args["output_format"]
+
+    for traj in rets:
+        aux.write_traj_to_file(traj,
+                               dirt=output_directory,
+                               output_filename=output_filename,
+                               output_format=output_format
+                               )
     return rets
 
 
@@ -234,7 +248,7 @@ def sample_trajectory_loglin(dataframe,
 
     sd = seqdist.LogLinearJTPosterior()
     sd.init_model(dataframe.to_numpy(), pseudo_obs, levels, {})
-    return sample_trajectory(n_samples, randomize, sd, reset_cache=reset_cache)
+    return sample_trajectory(n_samples, randomize, sd, reset_cache=reset_cache, **args)
 
 
 def sample_trajectories_loglin_to_file(dataframe,
@@ -261,7 +275,8 @@ def sample_trajectories_loglin_to_file(dataframe,
                                                           randomize=r,
                                                           seqdist=sd,
                                                           reset_cache=reset_cache,
-                                                          dir=output_directory)
+                                                          output_directory=output_directory,
+                                                          **args)
                     graph_trajectories.append(graph_trajectory)
     return graph_trajectories
 
@@ -302,19 +317,30 @@ def sample_trajectories_loglin_parallel(dataframe,
     for p in processes:
         p.join()
 
+    output_directory = './'
+    output_filename = output_format = None
     if "output_directory" in args:
-        dir = args["output_directory"]
-        for traj in rets:
-            aux.write_traj_to_file(traj, dir)
-    return rets
+        output_directory = args["output_directory"]
+    if "output_filename" in args:
+        output_filename = args["output_filename"]
+    if "output_format" in args:
+        output_format = args["output_format"]
 
+    for traj in rets:
+        aux.write_traj_to_file(traj,
+                               dirt=output_directory,
+                               output_filename=output_filename,
+                               output_format=output_format
+                               )
+    return rets
         
 def trajectory_to_file(n_samples,
                        randomize,
                        seqdist,
                        reset_cache=True,
-                       dir=".",
-                       reseed=False):
+                       output_directory=".",
+                       reseed=False,
+                       **args):
     """ Writes the trajectory of graphs generated by particle Gibbs to file.
 
     Args:
@@ -330,10 +356,24 @@ def trajectory_to_file(n_samples,
         np.random.seed()
 
     #print (n_particles, alpha, beta, radius, n_samples, str(seqdist), reset_cache)
-    graph_trajectory = sample_trajectory(n_samples, randomize,
-                                         seqdist, reset_cache=reset_cache)
-    aux.write_traj_to_file(graph_trajectory, dir)
+    graph_trajectory = sample_trajectory(n_samples,
+                                         randomize,
+                                         seqdist,
+                                         reset_cache=reset_cache,
+                                         **args)
+    output_filename = output_format = None
+    if "output_directory" in args:
+        output_directory = args["output_directory"]
+    if "output_filename" in args:
+        output_filename = args["output_filename"]
+    if "output_format" in args:
+        output_format = args["output_format"]
 
+    aux.write_traj_to_file(graph_trajectory,
+                           dirt=output_directory,
+                           output_filename=output_filename,
+                           output_format=output_format
+    )
     return graph_trajectory
 
   
@@ -370,14 +410,12 @@ def max_likelihood_gmm(dataframe, graph, delta=1.0, jt=None):
     if not jt:
         jt = dlib.junction_tree(graph)
         assert (jtlib.is_junction_tree(jt))
-    else:
-        graph = jtlib.graph(jt)
 
-    loglike_jt = sd.log_likelihood(graph) - \
+    loglike_jt = sd.log_likelihood(jt) - \
         jtlib.log_n_junction_trees(jt, jtlib.separators(jt))
 
     
-    return loglike_jt, sd.log_likelihood(graph)
+    return loglike_jt, sd.log_likelihood(jt)
 
 
 

@@ -132,9 +132,8 @@ class LogLinearJTPosterior(SequentialJTDistribution):
                                "levels": [list(l) for l in self.levels]},
                 "data": self.data.tolist()}
 
-    def log_likelihood(self, graph):
-        tree = parallelDG.graph.decomposable.junction_tree(graph)
-        separators = tree.get_separators()
+    def log_likelihood(self, tree):
+        separators = jtlib.separators(tree)
         return loglin.log_likelihood_partial(tree.nodes(),
                                              separators,
                                              self.no_levels,
@@ -267,8 +266,8 @@ class GGMJTPosterior(SequentialJTDistribution):
 
         return new - old
 
-    def log_likelihood(self, graph):
-        return gaussian_graphical_model.log_likelihood(graph, self.SS, self.n,
+    def log_likelihood(self, tree):
+        return gaussian_graphical_model.log_likelihood(tree, self.SS, self.n,
                                                        self.parameters["D"],
                                                        self.parameters["delta"],
                                                        self.cache)

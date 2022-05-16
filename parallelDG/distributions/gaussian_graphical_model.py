@@ -9,7 +9,7 @@ from parallelDG.distributions import wishart as wish
 import parallelDG.graph.junction_tree as jtlib
 
 
-def log_likelihood(graph, S, n, D, delta, cache={}):
+def log_likelihood(tree, S, n, D, delta, cache={}):
     """
 
     Args:
@@ -18,10 +18,6 @@ def log_likelihood(graph, S, n, D, delta, cache={}):
         delta (float): scale parameter
         n (int): number of data samples on which S is built
     """
-    if nx.is_tree(graph):
-        tree = graph
-    else:
-        tree = parallelDG.graph.decomposable.junction_tree(graph)
     separators = jtlib.separators(tree)
     cliques = tree.nodes()
     return log_likelihood_partial(S, n, D, delta, cliques, separators, cache)

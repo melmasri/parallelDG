@@ -55,7 +55,7 @@ def log_likelihood_partial(cliques,
                                     i not in c])
         alpha = cell_alpha * no_cells_outside / tot_no_cells
         cliques_constants += ll_complete_set_ratio(c, alpha, counts, data, levels, cache)
-
+    
     seps_constants = 0.0
     for s in separators:
         if s == frozenset({}):

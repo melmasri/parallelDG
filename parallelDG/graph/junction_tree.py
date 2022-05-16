@@ -435,8 +435,8 @@ def graph(tree):
     Returns:
         NetworkX graph
     """
-    if not nx.is_tree(tree):
-        return tree
+    # if not nx.is_tree(tree):
+    #    return tree
         
     G = nx.Graph()
     for c in tree.nodes():
@@ -623,10 +623,15 @@ def jt_to_prufer(tree):
 def to_frozenset(G):
     """ Converts a graph with nodes and edges as lists, to a frozenset"""
     g = nx.Graph()
-    for n1 in G.nodes():
-        g.add_node(frozenset(sorted(n1)))
-        
-    for n1, n2 in G.edges():
-        g.add_edge(frozenset(sorted(n1)), frozenset(sorted(n2)))
-    return g
 
+    def _sort(n):
+        if hasattr(n, '__iter__'):
+            return sorted(n)
+        return [n]
+
+    for n1 in G.nodes():
+        g.add_node(frozenset(_sort(n1)))
+
+    for n1, n2 in G.edges():
+        g.add_edge(frozenset(_sort(n1)), frozenset(_sort(n2)))
+    return g

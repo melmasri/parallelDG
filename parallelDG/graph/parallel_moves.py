@@ -305,24 +305,25 @@ def revert_moves(tree, node, cliques):
                 connect(tree, nd, X, conn)
 
 
-def jt_to_graph_connect_move(old_clique,
-                             new_clique,
+def jt_to_graph_connect_move(clique_tupple,
                              node,
                              i=None):
+    new_clique = clique_tupple[0]
     simplix = new_clique - node
     node = list(node)[0]
     # 0 for connection tyep
-    edges_to_add = [(node, y, 0, i) for y in set(simplix)]
+    edges_to_add = [(i, 0, (node,y)) for y in set(simplix)]
     return edges_to_add
 
-def jt_to_graph_disconnect_move(old_clq,
-                                anchor_clq,
+def jt_to_graph_disconnect_move(clique_tupple,
                                 node,
                                 i=None):
+    old_clq = clique_tupple[1]
+    anchor_clq = clique_tupple[2]
     simplix = old_clq - anchor_clq
     node = list(node)[0]
     # 1 for disconnect type
-    edges_to_remove = [(node, y, 1, i) for y in set(simplix)]
+    edges_to_remove = [(i, 1, (node, y)) for y in set(simplix)]
     return edges_to_remove
 
 

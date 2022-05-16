@@ -319,7 +319,7 @@ def read_all_trajectories_in_dir(directory):
         t.read_file(filename)
         trajlist.append(t)
 
-    return group_trajectories_by_setting(trajlist)
+    return trajlist
 
 def group_trajectories_by_setting(trajlist):
     # Gather all with the same parameter setting
@@ -373,15 +373,18 @@ def plot_graph_traj_statistics(graph_traj, write_to_file=False):
 
 def write_traj_to_file(graph_trajectory,
                        dirt,
-                       output_filename="trajectory.csv"):
+                       output_filename=None,
+                       output_format=None):
     date = datetime.datetime.today().strftime('%Y%m%d%H%m%S')
     if not os.path.exists(dirt):
         os.makedirs(dirt)
+    if output_format == 'benchpress':
+        filename = dirt + "/"+output_filename
+        df = graph_trajectory.graph_diff_trajectory_df()
+        df.to_csv(filename, sep=",", index=False)
+    else:
+        filename = dirt + "/" + str(graph_trajectory) + "_" + date + ".json"
+        graph_trajectory.write_file(filename=filename)
 
-    filename = dirt + "/"+output_filename
-    df = graph_trajectory.graph_diff_trajectory_df()
-    df.to_csv(filename, sep=",", index=False)
-
-    #graph_trajectory.write_file(filename=filename)
     print("wrote file: " + filename)
  

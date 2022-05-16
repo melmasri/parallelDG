@@ -78,15 +78,15 @@ class Trajectory:
     
 
     def jt_to_graph_updates(self):
-        # (move_type, node, new_clq, old_clq, anchor_clq, iteration)
+        # (iteration, move_type, node, (new_clq, old_clq, anchor_clq))
         g = list()
         # g0 = jtlib.graph(jt.copy())
         # g.append(g0.copy())
         for m in self.jt_updates:
-            if m[0] == 0:  # connect move
-                g += pmlib.jt_to_graph_connect_move(m[3], m[2], m[1], m[5])
-            else:
-                g += pmlib.jt_to_graph_disconnect_move(m[3], m[4], m[1], m[5])
+            if m[1] == 0:  # connect move
+                g += pmlib.jt_to_graph_connect_move(m[3], m[2], m[0])
+            else:               # disconnect
+                g += pmlib.jt_to_graph_disconnect_move(m[3], m[2], m[0])
         self.set_graph_updates(g)
 
 
@@ -97,11 +97,11 @@ class Trajectory:
         graph_traj = [None] * self.sampling_method['params']['samples']
         graph_traj[0] = g.copy()
         for move in self.graph_updates:
-            if move[2] == 0:  # connect
-                g.add_edge(*move[:2])
-            if move[2] == 1:  # disconnect
-                g.remove_edge(*move[:2])
-            graph_traj[move[3]] = g.copy()
+            if move[1] == 0:  # connect
+                g.add_edge(*move[2])
+            if move[1] == 1:  # disconnect
+                g.remove_edge(*move[2])
+            graph_traj[move[0]] = g.copy()
             # Fill forward graph traj
         for idx, val in enumerate(graph_traj):
             if idx == 0:
@@ -159,7 +159,7 @@ class Trajectory:
     def log_likelihood(self, from_index=0):
         if not self.logl:
             if self.trajectory:
-                self.logl = [self.seqdist.log_likelihood(g) if g else None for g in self.trajectory]
+                self.logl = [self.seqdist.log_likelihood(dlib.junction_tree(g)) if g else None for g in self.trajectory]
             elif self.jt_trajectory:
                 self.logl = [self.seqdist.log_likelihood(g) if g else None for g in self.jt_trajectory]
             else:
@@ -242,10 +242,9 @@ class Trajectory:
             self.jt_to_graph_updates()
 
         output = pd.DataFrame(self.graph_updates,
-                              columns=['e1', 'e2', 'move_type', 'index'])
-        output['edge_tupple'] = output[["e1","e2"]].apply(tuple, axis=1)
+                              columns=['index', 'move_type', 'edge_tuple'])
         formated_output = output.groupby(['move_type',
-                                          'index'])['edge_tupple'].apply(
+                                          'index'])['edge_tuple'].apply(
                                               list_to_string).reset_index(
                                                   name='edges')
 
@@ -283,29 +282,40 @@ class Trajectory:
                      "n_updates": self.n_updates,
                      "graph_updates": self.graph_updates,
                      "jt_updates": self.jt_updates,
-                     "init_graph": json_graph.node_link_data(self.init_graph)
-                     }
+                     "init_graph": json_graph.node_link_data(self.init_graph),
+                     "loglikelihood_trace": self.logl
+        }
         return mcmc_traj
 
-
+  
     def from_json(self, mcmc_json):
+
+        def jt_update_to_frozenset(update):
+            return (update[0],  # mcmc iteration
+                    update[1],  # move type 0 connect 1 disconnect
+                    frozenset(update[2]),  # node
+                    (frozenset(update[3][0]),  # new clique
+                     frozenset(update[3][1]),  # old clique
+                     frozenset(update[3][2])  # anchor clique
+                     )
+                    )   
         self.set_time(mcmc_json["run_time"])
         self.sampling_method = mcmc_json["sampling_method"]
         self.n_updates = mcmc_json['n_updates']
         self.optional = mcmc_json["optional"]
-        self.init_graph = jtlib.to_frozenset(
-            json_graph.node_link_graph(
-                mcmc_json['init_graph']))
-        self.seqdist.init_model_from_json(mcmc_json["model"])
+        self.init_graph = json_graph.node_link_graph(
+            mcmc_json['init_graph'])
+        self.logl = mcmc_json['loglikelihood_trace']
         self.n_updates = mcmc_json['n_updates']
         self.set_graph_updates(mcmc_json['graph_updates'])
-        self.set_jt_updates(mcmc_json['jt_updates'])
+        self.set_jt_updates(map(jt_update_to_frozenset,
+                                mcmc_json['jt_updates']))
         
         if mcmc_json["model"]["name"] == "ggm_jt_post":
             self.seqdist = sd.GGMJTPosterior()
         elif mcmc_json["model"]["name"] == "loglin_jt_post":
             self.seqdist = sd.LogLinearJTPosterior()
-
+        self.seqdist.init_model_from_json(mcmc_json["model"])
 
     def read_file(self, filename):
         """ Reads a trajectory from json-file.
@@ -315,7 +325,11 @@ class Trajectory:
         self.from_json(mcmc_json)
 
     def __str__(self):
-        self.sampling_method["method"] == "mh":
-        return "mh_graph_trajectory_" + str(self.seqdist) + "_length_" +        str(len(self.trajectory)) + \
-            "_randomize_interval_" + str(self.sampling_method["params"]["randomize_interval"])
+        strl = (
+            "mh_graph_trajectory_" + str(self.seqdist)
+            + "_length_" + str(len(self.trajectory))
+            + "_randomize_interval_"
+            + str(self.sampling_method["params"]["randomize_interval"])
+        )
+        return strl
 

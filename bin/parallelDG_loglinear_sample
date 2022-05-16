@@ -15,9 +15,11 @@ def main(data_filename,
          trajectory_length,
          randomize,
          pseudo_obs,
+         output_directory,
+         output_filename,
+         output_format,
          seed,
-         parallel=False,
-         output_directory=".",
+         parallel,
          reset_cache=True,
          reps=1,
          **args):
@@ -43,7 +45,9 @@ def main(data_filename,
                                                pseudo_obs=pseudo_obs,
                                                reset_cache=True,
                                                reps=reps,
-                                               output_directory=output_directory)
+                                               output_directory=output_directory,
+                                               output_filename=output_filename,
+                                               output_format=output_format)
     else:
         ps.sample_trajectories_loglin_to_file(df,
                                               n_samples=trajectory_length,
@@ -51,7 +55,9 @@ def main(data_filename,
                                               pseudo_obs=pseudo_obs,
                                               reset_cache=True,
                                               reps=reps,
-                                              output_directory=output_directory)
+                                              output_directory=output_directory,
+                                              output_filename=output_filename,
+                                              output_format=output_format)
 
 if __name__ == "__main__":
     import argparse
@@ -77,6 +83,21 @@ if __name__ == "__main__":
         help="Filename of dataset stored as row vectors och floats. "
     )
     parser.add_argument(
+        '-F', '--output_filename',
+        required=False,
+        help="Output filename"
+    )
+    parser.add_argument(
+        '-o', '--output_directory',
+        required=False, default=".",
+        help="Output directory"
+    )
+    parser.add_argument(
+        '-t', '--output_format',
+        required=False,
+        help="Output format (option = benchpress, or None)"
+    )
+    parser.add_argument(
         '-s', '--seed',
         type=int, required=False, default=None
     )
@@ -94,11 +115,6 @@ if __name__ == "__main__":
         '--parallel',
         required=False, action="store_true", default=False,
         help="run MCMC on parallel processes."
-    )
-    parser.add_argument(
-        '-o', '--output_directory',
-        required=False, default=".",
-        help="Output directory"
     )
     parser.add_argument(
         '--reset_cache',
