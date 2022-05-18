@@ -75,7 +75,6 @@ class Trajectory:
     def set_init_jt(self, init_jt):
         self.init_jt = init_jt
         self.init_graph = jtlib.graph(init_jt)
-    
 
     def jt_to_graph_updates(self):
         # (iteration, move_type, node, (new_clq, old_clq, anchor_clq))
@@ -88,7 +87,6 @@ class Trajectory:
             else:               # disconnect
                 g += pmlib.jt_to_graph_disconnect_move(m[3], m[2], m[0])
         self.set_graph_updates(g)
-
 
     def set_graph_trajectories(self):
         if not self.graph_updates:
@@ -118,20 +116,16 @@ class Trajectory:
         self.jt_trajectory[0] = self.init_jt.copy()
         jt = self.init_jt
         trajs = []
-        try:
-            for move in self.jt_updates:
-                if move[3] in jt:
-                    if move[0] == 0: # connect
-                        pmlib.connect(jt, move[3], move[2], move[4])
-                    if move[0] == 1: # disconnect
-                        pmlib.disconnect(jt, move[3], move[2])
-                trajs.append(jt.copy)
-            self.jt_trajectory = trajs
-        except:
-            import pdb
-            pdb.set_trace()
 
-    
+        for move in self.jt_updates:
+            if move[3] in jt:
+                if move[0] == 0:  # connect
+                    pmlib.connect(jt, move[3], move[2], move[4])
+                if move[0] == 1:  # disconnect
+                    pmlib.disconnect(jt, move[3], move[2])
+            trajs.append(jt.copy)
+        self.jt_trajectory = trajs
+
     def add_sample(self, graph, time, logl=None):
         """ Add graph to the trajectory.
 
@@ -217,10 +211,17 @@ class Trajectory:
         def list_to_string(edge_list):
             s = "["
             for i, e in enumerate(edge_list):
+                e = sorted(e)
                 s += str(e[0]) + "-" + str(e[1])
                 if i != len(edge_list)-1:
                     s += ";"
             return s + "]"
+
+        def flatten(t):
+            return [item for sublist in t for item in sublist]
+
+        def list_to_string_flatten(t):
+            return list_to_string(flatten(t))
 
         added = []
         removed = []
@@ -241,39 +242,100 @@ class Trajectory:
         if not self.graph_updates:
             self.jt_to_graph_updates()
 
+        # Creating raw + summary updates
         output = pd.DataFrame(self.graph_updates,
-                              columns=['index', 'move_type', 'edge_tuple'])
-        formated_output = output.groupby(['move_type',
-                                          'index'])['edge_tuple'].apply(
-                                              list_to_string).reset_index(
-                                                  name='edges')
-
-        added = formated_output[output['move_type'] == 0].rename(
-            columns={"edges": "added",
-                     "index": "index"})
-
-        removed = formated_output[output['move_type'] == 1].rename(
-            columns={"edges": "removed",
-                     "index": "index"})
-
-        removed['added'] = None
+                              columns=['index',
+                                       'move_type',
+                                       'edge_tuple'])
+        prev_edges_set = edges_set = set([])
+        added_list = list()
+        removed_list = list()
+        added_raw_list = list()
+        removed_raw_list = list()
+        for index, row in output.iterrows():
+            prev_edges_set = edges_set
+            if row['move_type'] == 0:  # connection
+                edges_set = edges_set | set([tuple(sorted(row['edge_tuple']))])
+                added_raw_list.append((row['index'], [row['edge_tuple']]))
+            if row['move_type'] == 1:  # disconnect
+                edges_set = edges_set - set([tuple(sorted(row['edge_tuple']))])
+                removed_raw_list.append((row['index'], [row['edge_tuple']]))
+            added =  list(edges_set - prev_edges_set)
+            removed = list(prev_edges_set - edges_set)
+            if added:
+                added_list.append((row['index'], added))
+            if removed:
+                removed_list.append((row['index'], removed))
+        # Raw list
+        # added_raw = pd.DataFrame(added_raw_list,
+        #                          columns=['index',
+        #                                   'added']
+        #                          ).groupby(
+        #                             ['index']
+        #                          ).added.apply(
+        #                              list_to_string_flatten
+        #                          ).reset_index(name='added')
+        # added_raw['removed'] = None
+        # removed_raw = pd.DataFrame(removed_raw_list,
+        #                            columns=['index',
+        #                                     'removed']
+        #                            ).groupby(
+        #                                ['index']
+        #                            ).removed.apply(
+        #                                list_to_string_flatten
+        #                            ).reset_index(name='removed')
+        # removed_raw['added'] = None
+        # _cols = ['added', 'index', 'removed']
+        # df_raw = added_raw[_cols].append(removed_raw[_cols]).sort_values(
+        #     by='index').fillna('[]')
+        # df_raw.rename(columns={'index': 'index_raw',
+        #                        'added': 'added_raw',
+        #                        'removed': 'removed_raw'
+        #                        },
+        #               inplace=True)
+        # Summary list
+        added = pd.DataFrame(added_list,
+                             columns=['index',
+                                      'added']
+                             ).groupby(
+                                 ['index']
+                             ).added.apply(
+                                 list_to_string_flatten
+                             ).reset_index(name='added')
         added['removed'] = None
-
+        removed = pd.DataFrame(removed_list,
+                               columns=['index',
+                                        'removed']
+                               ).groupby(
+                                   ['index']
+                               ).removed.apply(
+                                   list_to_string_flatten
+                               ).reset_index(name='removed')
+        removed['added'] = None
         _cols = ['added', 'index', 'removed']
         df = added[_cols].append(removed[_cols]).sort_values(
-            by='index'
-        ).fillna('[]')
+            by='index').fillna('[]')
+
         #  getting loglikelihood
         score = pd.DataFrame({
             'index': range(len(self.logl)),
             'score': self.logl
         })
 
-        final_df = df.merge(score)
-
+        final_df = df.merge(score, how='left')
+        # final_raw_df = df_raw.merge(score,
+        #                             how='left',
+        #                             left_on='index_raw'
+        #                             right_on='index'
+        #                            )
+        # df2.rename(columns={
+        #     'index': 'index_raw',
+        #     'added': 'added_raw',
+        #     'removed': 'removed_raw',
+        #     'score': 'score_raw'
+        #   }).append(final_raw_df)
         return df2.append(final_df)
 
-    
     def to_json(self, optional={}):
         mcmc_traj = {"model": self.seqdist.get_json_model(),
                      "run_time": self.time,
