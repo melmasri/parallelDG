@@ -33,7 +33,7 @@ classifiers = [
 setup(
     name='parallelDG',
     python_requires='<3.0',
-    version=0.199,
+    version=0.4,
     description='Parallel Bayesian structure learning in decomposable graphical models.',
     long_description=readme,
     packages=packages,
