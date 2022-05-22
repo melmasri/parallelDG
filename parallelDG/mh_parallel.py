@@ -28,17 +28,23 @@ def sample_trajectory(n_samples,
                       **args):
     if init_graph:
         graph = init_graph
-    else:   
+        jt = dlib.junction_tree(graph)
+    else:
         graph = nx.Graph()
         graph.add_nodes_from(range(sd.p))
+        dummy_tree = jtlib.to_frozenset(nx.random_tree(n=sd.p))
+        jt = jtlib.JunctionTree()
+        jt.add_nodes_from(dummy_tree.nodes())
+        jt.add_edges_from(dummy_tree.edges())
+        jt.num_graph_nodes = sd.p
+        
 
     if reset_cache is True:
         sd.cache = {}
-    # graph = ar_graph.copy()
     cli_hyper_param = 2
     sep_hyper_param = 1
-    jt = dlib.junction_tree(graph)
-    assert (jtlib.is_junction_tree(jt))
+    #jt = dlib.junction_tree(graph)
+    # assert (jtlib.is_junction_tree(jt))
     jt.latent = True
     jt_traj = [None] * n_samples
     ## graphs = [None] * n_samples
@@ -58,7 +64,6 @@ def sample_trajectory(n_samples,
     gtraj.set_sequential_distribution(sd)
     gtraj.set_init_graph(graph)  # don't make this a frozenset
     
-    log_prob_traj[0] = 0.0
     log_prob_traj[0] = sd.log_likelihood(jt_traj[0])
     update_moves = list()
     num_nodes = len(graph)
@@ -139,7 +144,7 @@ def sample_trajectory(n_samples,
     gtraj.set_jt_updates(update_moves)
     #gtraj.jt_trajectory = jt_traj
 
-    print('Total of {} updates, for an average of {:.2f} per iteration or {:.2f}updates/sece'.format(k, k/n_samples,k/(toc-tic)))
+    print('Total of {} updates, for an average of {:.2f} per iteration or {:.2f}updates/sec'.format(k, k/n_samples,k/(toc-tic)))
     return gtraj
 
 
