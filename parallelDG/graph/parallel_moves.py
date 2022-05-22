@@ -50,7 +50,7 @@ def neighboring_cliques_node(tree, node, empty_node=False):
     in  a dictionary. key:item pairs as (connector in node-induced):nei_clique
     Args:
       tree (NetwokrX) a junction tree
-      node (integer) a node
+      node (frozenset) a node
       empty_node (bool) if empty cliques should be included
     """
     nei_cliques = dict()
@@ -123,11 +123,8 @@ def paritioned_connect_moves(tree, node, empty_node=True):
         of those moves.
     Args:
       tree (NetwokrX) a junction tree
-      node (integer) a node
+      node (frozenset) a node
     """
-    if not type(node) is set and not type(node) is frozenset:
-        node = frozenset([node])
-
     return neighboring_cliques_node(tree, node, empty_node=empty_node)
 
 def paritioned_disconnect_moves(tree, node):
@@ -137,10 +134,8 @@ def paritioned_disconnect_moves(tree, node):
         of those moves.
     Args:
       tree (NetwokrX) a junction tree
-      node (integer) a node
+      node (frozenset) a node
     """
-    if not type(node) is set and not type(node) is frozenset:
-        node = frozenset([node])
     
     bd_cliques, dumble = boundary_cliques_node(tree, node, ret_edges=True)
     if dumble:
@@ -208,23 +203,19 @@ def disconnect(tree, old_clique, new_clique):
         update_tree(tree, new_clique)
 
 
-        
 def connect(tree, old_clique, new_clique, anchor_clique=None):
-    if new_clique not in tree:
-        tree.add_node(new_clique)
-        # import pdb; pdb.set_trace()
-        if old_clique:  # not an empty clique-node
-            edges_to_add = [(new_clique, y) for y in tree.neighbors(old_clique)
-                            if y != new_clique]
-            tree.remove_node(old_clique)
-            tree.add_edges_from(edges_to_add)
-        else:  # empty clique-node
-            edges_to_add = [(new_clique, anchor_clique)]
-            tree.add_edges_from(edges_to_add)
-        if not tree.latent:
-            update_tree(tree, new_clique)
-    else:
-        print('node in tree -- connect {}'.format(new_clique))
+    tree.add_node(new_clique)
+    # import pdb; pdb.set_trace()
+    if old_clique:  # not an empty clique-node
+        edges_to_add = [(new_clique, y) for y in tree.neighbors(old_clique)
+                        if y != new_clique]
+        tree.remove_node(old_clique)
+        tree.add_edges_from(edges_to_add)
+    else:  # empty clique-node
+        edges_to_add = [(new_clique, anchor_clique)]
+        tree.add_edges_from(edges_to_add)
+    if not tree.latent:
+        update_tree(tree, new_clique)
 
 
 def update_tree(tree, clique):
