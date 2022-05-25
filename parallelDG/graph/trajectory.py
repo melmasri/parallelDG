@@ -33,6 +33,7 @@ class Trajectory:
         self.graph_updates = []  # format [(edge, edge, movetype(0,1)),] 0 disconnect, 1 connect
         self.init_graph = None
         self.init_jt = None
+        self.graph_dist = None
 
     def set_sampling_method(self, method):
         self.sampling_method = method
@@ -44,6 +45,14 @@ class Trajectory:
             seqdist (SequentialJTDistribution): A sequential distribution
         """
         self.seqdist = seqdist
+
+    def set_graph_prior(self, graph_dist):
+        """ Set the graph prior distribution prior
+
+        Args: 
+            graph_dist (SequentialJTDistribution): A sequential distribution
+        """
+        self.graph_dist = graph_dist
 
     def set_trajectory(self, trajectory):
         """ Set the trajectory of graphs.

@@ -28,6 +28,81 @@ class SequentialJTDistribution(object):
         pass
 
 
+class ModifiedBornnCaron(SequentialJTDistribution):
+    """ Graph prior ratios based on modified Bornn & Caron graph priors.
+        As P(G) = prod{clq} f(clq)/ prod{sep} g(sep)
+        f(x) = exp(alpha * |x| -1)
+        g(x) = exp(beta * |x|)
+    """
+
+    def __init__(self, param_clq, param_sep):
+        self.param_clq = 2.0
+        self.param_sep = 1.0
+
+    def log_potential(self, param, clq_size):
+        return param * (clq_size)
+    
+    def log_prior(self, cliques, seperators):
+        lclq = 0.0
+        lsep = 0.0
+        for c in cliques:
+            lclq += self.log_potential(self.param_clq, len(c) - 1.0)
+        for s in seperators:
+            lsep += self.log_potential(self.param_sep, len(s))
+        return lclq - lsep
+
+    def log_prior_partial(self, clq, sep):
+        lp = self.log_potential(self.param_clq,
+                               len(clq) - 1.0) - self.log_potential(
+                                   self.param_sep, len(sep)
+                               )
+        return lp
+
+    def log_ratio(self,
+                  old_cliques,
+                  old_separators,
+                  new_cliques,
+                  new_separators,
+                  old_JT,
+                  new_JT):
+        new = self.log_prior(new_cliques, new_separators)
+        old = self.log_prior(old_cliques, old_separators)
+        return new - old
+
+
+class EdgePenalty(SequentialJTDistribution):
+    """ Edge penalty prior, as P(G) = prod{clq, sep} f(clq) / f(sep). 
+        f(x) = exp(- alpha * |x|(|x| -1))
+    """
+
+    def __init__(self, alpha):
+        self.alpha = 1.0
+
+    def log_potential(self, c):
+        a = len(c)
+        return - self.alpha * a * (a - 1.0)/2.0
+
+    def log_prior(self, cliques, seperators):
+        lclq = 0.0
+        lsep = 0.0
+        for c in cliques:
+            lclq += self.log_potential(c)
+        for s in seperators:
+            lsep += self.log_potential(s)
+        return lclq - lsep
+
+    def log_ratio(self,
+                  old_cliques,
+                  old_separators,
+                  new_cliques,
+                  new_separators,
+                  old_JT,
+                  new_JT):
+        new = self.log_prior(new_cliques, new_separators)
+        old = self.log_prior(old_cliques, old_separators)
+        return new - old
+
+
 class UniformJTDistribution(SequentialJTDistribution):
     """ A sequential formulation of P(T) = P(T|G)P(G), where
         P(G)=1/(#decomopsable graphs)
