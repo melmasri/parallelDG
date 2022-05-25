@@ -141,21 +141,22 @@ def sample_trajectory(n_samples,
     #gtraj.jt_trajectory = jt_traj
 
     print('Total of {} updates, for an average of {:.2f} per iteration or {:.2f}updates/sec'.format(k, k/n_samples,k/(toc-tic)))
+    print('Acceptance rate {:.4f}'.format(len(update_moves)/k))
     return gtraj
 
 
 def get_prior(graph_prior):
     sd = None
     if graph_prior[0] == "mbc":
-        alpha = int(graph_prior[1])
-        beta = int(graph_prior[2])
+        alpha = float(graph_prior[1])
+        beta = float(graph_prior[2])
         sd = seqdist.ModifiedBornnCaron(alpha, beta)
     if graph_prior[0] == "edgepenalty":
-        alpha = int(graph_prior[1])
+        alpha = float(graph_prior[1])
         sd = seqdist.EdgePenalty(alpha)
     # default prior
     if not sd:
-        sd = get_prior("mbc", clq_param=2.0, sep_param=1.0)
+        sd = get_prior(["mbc", 2.0, 4.0])
     return sd
 
 
@@ -164,7 +165,7 @@ def sample_trajectory_ggm(dataframe,
                           randomize=100,
                           D=None,
                           delta=1.0,
-                          graph_prior=['mbc', 2.0, 1.0],
+                          graph_prior=['mbc', 2.0, 4.0],
                           cache={}, **args):
     p = dataframe.shape[1]
     if D is None:
@@ -227,7 +228,7 @@ def sample_trajectories_ggm_to_file(dataframe,
                                     D=None,
                                     reset_cache=True,
                                     reps=1,
-                                    graph_prior=['mbc', 2.0, 1.0],
+                                    graph_prior=['mbc', 2.0, 4.0],
                                     output_directory=".",
                                     **args):
     p = dataframe.shape[1]
@@ -260,12 +261,12 @@ def sample_trajectories_ggm_parallel(dataframe,
                                      delta=[1.0,],
                                      reset_cache=True,
                                      reps=1,
-                                     graph_prior = ['mbc', 2.0, 1.0],
+                                     graph_prior=['mbc', 2.0, 4.0],
                                      **args):
     p = dataframe.shape[1]
     if D is None:
         D = np.identity(p)
-    sd_grpah = get_prior(graph_prior)
+    sd_graph = get_prior(graph_prior)
     queue = multiprocessing.Queue()
     processes = []
     rets = []
@@ -312,7 +313,7 @@ def sample_trajectory_loglin(dataframe,
                              n_samples,
                              randomize,
                              pseudo_obs=1.0,
-                             graph_prior = ['mbc', 2.0, 1.0],
+                             graph_prior=['mbc', 2.0, 4.0],
                              reset_cache=True, **args):
     p = dataframe.shape[1]
     n_levels = np.array(dataframe.columns.get_level_values(1), dtype=int)
@@ -335,7 +336,7 @@ def sample_trajectories_loglin_to_file(dataframe,
                                        pseudo_obs=[1.0, ],
                                        reset_cache=True,
                                        reps=1,
-                                       graph_prior = ['mbc', 2.0, 1.0],
+                                       graph_prior=['mbc', 2.0, 4.0],
                                        output_directory=".",
                                        **args):
     p = dataframe.shape[1]
@@ -366,7 +367,7 @@ def sample_trajectories_loglin_parallel(dataframe,
                                         pseudo_obs=[1.0, ],
                                         reset_cache=True,
                                         reps=1,
-                                        graph_prior = ['mbc', 2.0, 1.0],
+                                        graph_prior = ['mbc', 2.0, 4.0],
                                         **args):
 
     p = dataframe.shape[1]
