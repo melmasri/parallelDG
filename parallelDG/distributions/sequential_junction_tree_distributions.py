@@ -35,7 +35,7 @@ class ModifiedBornnCaron(SequentialJTDistribution):
         g(x) = exp(beta * |x|)
     """
 
-    def __init__(self, param_clq, param_sep):
+    def __init__(self, param_clq=4.0, param_sep=2.0):
         self.param_clq = param_clq
         self.param_sep = param_sep
 
@@ -52,10 +52,9 @@ class ModifiedBornnCaron(SequentialJTDistribution):
         return lclq - lsep
 
     def log_prior_partial(self, clq, sep):
-        lp = self.log_potential(self.param_clq,
-                                len(clq) - 1.0) - self.log_potential(
-                                   self.param_sep, len(sep)
-                               )
+        lp = 0.0
+        lp += self.log_potential(self.param_clq, len(clq) - 1.0)
+        lp -= self.log_potential(self.param_sep, len(sep))
         return lp
 
     def log_ratio(self,
@@ -75,7 +74,7 @@ class EdgePenalty(SequentialJTDistribution):
         f(x) = exp(- alpha * |x|(|x| -1))
     """
 
-    def __init__(self, alpha):
+    def __init__(self, alpha=0.001):
         self.alpha = alpha
 
     def log_potential(self, c):
