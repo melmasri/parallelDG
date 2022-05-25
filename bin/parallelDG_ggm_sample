@@ -83,7 +83,7 @@ if __name__ == "__main__":
                         default=[1.0,],
                         help="Delta parameter is the GGM model")
     parser.add_argument(
-        '-p', '--prior',
+        '-p', '--graph-prior',
         required=False,
         default=['mbc', 2.0, 4.0],
         nargs='+',

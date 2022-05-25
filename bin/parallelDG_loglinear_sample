@@ -20,6 +20,7 @@ def main(data_filename,
          output_format,
          seed,
          parallel,
+         graph_prior,
          reset_cache=True,
          reps=1,
          **args):
@@ -48,6 +49,7 @@ def main(data_filename,
                                                pseudo_obs=pseudo_obs,
                                                reset_cache=True,
                                                reps=reps,
+                                               graph_prior=graph_prior,
                                                output_directory=output_directory,
                                                output_filename=output_filename,
                                                output_format=output_format)
@@ -57,6 +59,7 @@ def main(data_filename,
                                               randomize=randomize,
                                               pseudo_obs=pseudo_obs,
                                               reset_cache=True,
+                                              graph_prior=graph_prior,
                                               reps=reps,
                                               output_directory=output_directory,
                                               output_filename=output_filename,
@@ -79,7 +82,12 @@ if __name__ == "__main__":
                         required=True,
                         nargs='+',
                         help="Steps when junction tree is randomized ")
-
+    parser.add_argument(
+        '-p', '--graph_prior',
+        required=False,
+        default=['mbc', 2.0, 4.0],
+        nargs='+',
+        help="graph prior (mbc = modifiedBornnCaron. args = {mbc clq_param sep param, edgepenalty param}")
     parser.add_argument(
         '-f', '--data_filename',
         required=True,
@@ -116,7 +124,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         '--parallel',
-        required=False, action="store_true", default=False,
+        required=False,
+        action="store_true",
+        default=False,
         help="run MCMC on parallel processes."
     )
     parser.add_argument(

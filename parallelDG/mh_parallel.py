@@ -148,11 +148,18 @@ def sample_trajectory(n_samples,
 def get_prior(graph_prior):
     sd = None
     if graph_prior[0] == "mbc":
-        alpha = float(graph_prior[1])
-        beta = float(graph_prior[2])
+        if len(graph_prior) > 1:
+            alpha = float(graph_prior[1])
+            beta = float(graph_prior[2])
+        else:
+            alpha = 2.0
+            beta = 4.0
         sd = seqdist.ModifiedBornnCaron(alpha, beta)
     if graph_prior[0] == "edgepenalty":
-        alpha = float(graph_prior[1])
+        if len(graph_prior) > 1:
+            alpha = float(graph_prior[1])
+        else:
+            alpha = 0.001
         sd = seqdist.EdgePenalty(alpha)
     # default prior
     if not sd:
@@ -354,7 +361,7 @@ def sample_trajectories_loglin_to_file(dataframe,
                     graph_trajectory = trajectory_to_file(n_samples=T,
                                                           randomize=r,
                                                           seqdist=sd,
-                                                          seqdist_graph=ds_graph,
+                                                          seqdist_graph=sd_graph,
                                                           reset_cache=reset_cache,
                                                           output_directory=output_directory,
                                                           **args)
@@ -367,7 +374,7 @@ def sample_trajectories_loglin_parallel(dataframe,
                                         pseudo_obs=[1.0, ],
                                         reset_cache=True,
                                         reps=1,
-                                        graph_prior = ['mbc', 2.0, 4.0],
+                                        graph_prior=['mbc', 2.0, 4.0],
                                         **args):
 
     p = dataframe.shape[1]

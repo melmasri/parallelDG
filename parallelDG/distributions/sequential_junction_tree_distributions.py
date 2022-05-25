@@ -90,6 +90,10 @@ class EdgePenalty(SequentialJTDistribution):
             lsep += self.log_potential(s)
         return lclq - lsep
 
+    def log_prior_partial(self, clq, sep):
+        lp = self.log_potential(clq) - self.log_potential(sep)
+        return lp
+        
     def log_ratio(self,
                   old_cliques,
                   old_separators,
