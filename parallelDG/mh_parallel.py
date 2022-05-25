@@ -23,6 +23,7 @@ import parallelDG.auxiliary_functions as aux
 def sample_trajectory(n_samples,
                       randomize,
                       sd,
+                      sd_graph,
                       init_graph=None,
                       reset_cache=True,
                       **args):
@@ -41,8 +42,6 @@ def sample_trajectory(n_samples,
 
     if reset_cache is True:
         sd.cache = {}
-    cli_hyper_param = 2
-    sep_hyper_param = 1
     #jt = dlib.junction_tree(graph)
     # assert (jtlib.is_junction_tree(jt))
     jt.latent = True
@@ -52,9 +51,7 @@ def sample_trajectory(n_samples,
     ## graphs[0] = jtlib.graph(jt)
     log_prob_traj = [None] * n_samples
 
-    def log_exponentail_markov_law(a, clique):
-        return -a * len(clique)
-    
+
     gtraj = mcmctraj.Trajectory()
     gtraj.trajectory_type = "junction_tree"
     gtraj.set_sampling_method({"method": "mh",
@@ -62,8 +59,8 @@ def sample_trajectory(n_samples,
                                           "randomize_interval": randomize}
                                })
     gtraj.set_sequential_distribution(sd)
+    gtraj.set_graph_prior(sd_graph)
     gtraj.set_init_graph(graph)  # don't make this a frozenset
-    
     log_prob_traj[0] = sd.log_likelihood(jt_traj[0])
     update_moves = list()
     num_nodes = len(graph)
@@ -88,15 +85,15 @@ def sample_trajectory(n_samples,
                     sp_new = anchor_cl & cl_new
                     sp = anchor_cl & possible_cl
                     # New clique log-lik + prior
-                    log_p2 = sd.log_likelihood_partial(cliques=[cl_new],
-                                                       separators={sp_new: set([(anchor_cl, cl_new)])})
-                    log_g2 = log_exponentail_markov_law(cli_hyper_param, cl_new) \
-                        - log_exponentail_markov_law(sep_hyper_param, sp_new)
+                    log_p2 = sd.log_likelihood_partial(
+                        cliques=[cl_new],
+                        separators={sp_new: set([(anchor_cl, cl_new)])})
+                    log_g2 = sd_graph.log_prior_partial(cl_new, sp_new)
                     # old clique log-like + prior
-                    log_p1 = sd.log_likelihood_partial([possible_cl], {sp: set([(anchor_cl, possible_cl)])})
-                    log_g1 = log_exponentail_markov_law(cli_hyper_param, possible_cl) \
-                        - log_exponentail_markov_law(sep_hyper_param, sp)
-                    ## update probability
+                    log_p1 = sd.log_likelihood_partial(
+                        [possible_cl], {sp: set([(anchor_cl, possible_cl)])})
+                    log_g1 = sd_graph.log_prior_partial(possible_cl, sp)
+                    # update probability
                     alpha = min(1, np.exp(log_p2 + log_g2 - log_p1 - log_g1))
                     k += 1
                     if np.random.uniform() <= alpha:
@@ -116,15 +113,14 @@ def sample_trajectory(n_samples,
                     if cl_new in jt:
                         continue
                     sp_new = cl_new & anchor_cl
-                    ## New clique log-lik + prior
-                    log_p2 = sd.log_likelihood_partial([cl_new],
-                                                       {sp_new:set([(anchor_cl, cl_new)])})
-                    log_g2 = log_exponentail_markov_law(cli_hyper_param, cl_new) \
-                        - log_exponentail_markov_law(sep_hyper_param, sp_new)
-                    ## old clique + prior
+                    # New clique log-lik + prior
+                    log_p2 = sd.log_likelihood_partial(
+                        [cl_new],
+                        {sp_new: set([(anchor_cl, cl_new)])})
+                    log_g2 = sd_graph.log_prior_partial(cl_new, sp_new)
+                    # old clique + prior
                     log_p1 = sd.log_likelihood_partial([cl], {sp: set([(anchor_cl, cl)])})
-                    log_g1 = log_exponentail_markov_law(cli_hyper_param, cl) \
-                        - log_exponentail_markov_law(sep_hyper_param, sp)
+                    log_g1 = sd_graph.log_prior_partial(cl, sp)
                     alpha = min(1, np.exp(log_p2 + log_g2 - log_p1 - log_g1))
                     k += 1
                     if np.random.uniform() <= alpha:
@@ -145,17 +141,92 @@ def sample_trajectory(n_samples,
     #gtraj.jt_trajectory = jt_traj
 
     print('Total of {} updates, for an average of {:.2f} per iteration or {:.2f}updates/sec'.format(k, k/n_samples,k/(toc-tic)))
+    print('Acceptance rate {:.4f}'.format(len(update_moves)/k))
     return gtraj
 
 
-def sample_trajectory_ggm(dataframe, n_samples, randomize=100,
-                          D=None, delta=1.0, cache={}, **args):
+def get_prior(graph_prior):
+    sd = None
+    if graph_prior[0] == "mbc":
+        if len(graph_prior) > 1:
+            alpha = float(graph_prior[1])
+            beta = float(graph_prior[2])
+        else:
+            alpha = 2.0
+            beta = 4.0
+        sd = seqdist.ModifiedBornnCaron(alpha, beta)
+    if graph_prior[0] == "edgepenalty":
+        if len(graph_prior) > 1:
+            alpha = float(graph_prior[1])
+        else:
+            alpha = 0.001
+        sd = seqdist.EdgePenalty(alpha)
+    # default prior
+    if not sd:
+        sd = get_prior(["mbc", 2.0, 4.0])
+    return sd
+
+
+def sample_trajectory_ggm(dataframe,
+                          n_samples,
+                          randomize=100,
+                          D=None,
+                          delta=1.0,
+                          graph_prior=['mbc', 2.0, 4.0],
+                          cache={}, **args):
     p = dataframe.shape[1]
     if D is None:
         D = np.identity(p)
     sd = seqdist.GGMJTPosterior()
     sd.init_model(np.asmatrix(dataframe), D, delta, cache)
-    return sample_trajectory(n_samples, randomize, sd)
+    sd_graph = get_prior(graph_prior)
+    return sample_trajectory(n_samples, randomize, sd, sd_graph)
+
+
+def trajectory_to_file(n_samples,
+                       randomize,
+                       seqdist,
+                       seqdist_graph,
+                       reset_cache=True,
+                       output_directory=".",
+                       reseed=False,
+                       **args):
+    """ Writes the trajectory of graphs generated by particle Gibbs to file.
+
+    Args:
+        n_samples (int): Number of Gibbs iterations (samples)
+        seq_dist (SequentialJTDistributions): the distribution to be sampled from
+        filename_prefix (string): prefix to the filename
+
+    Returns:
+        mcmctraj.Trajectory: Markov chain of underlying graphs of the junction trees sampled.
+
+    """
+    if reseed is True:
+        np.random.seed()
+
+    #print (n_particles, alpha, beta, radius, n_samples, str(seqdist), reset_cache)
+    graph_trajectory = sample_trajectory(n_samples,
+                                         randomize,
+                                         seqdist,
+                                         seqdist_graph,
+                                         reset_cache=reset_cache,
+                                         **args)
+    output_filename = output_format = None
+    if "output_directory" in args:
+        output_directory = args["output_directory"]
+    if "output_filename" in args:
+        output_filename = args["output_filename"]
+    if "output_format" in args:
+        output_format = args["output_format"]
+
+    aux.write_traj_to_file(graph_trajectory,
+                           dirt=output_directory,
+                           output_filename=output_filename,
+                           output_format=output_format
+    )
+    return graph_trajectory
+
 
 def sample_trajectories_ggm_to_file(dataframe,
                                     n_samples,
@@ -164,13 +235,14 @@ def sample_trajectories_ggm_to_file(dataframe,
                                     D=None,
                                     reset_cache=True,
                                     reps=1,
+                                    graph_prior=['mbc', 2.0, 4.0],
                                     output_directory=".",
                                     **args):
     p = dataframe.shape[1]
     if D is None:
         D = np.identity(p)
     sd = seqdist.GGMJTPosterior()
-   
+    sd_graph = get_prior(graph_prior)
     graph_trajectories = []
     for _ in range(reps):
         for T in n_samples:
@@ -181,6 +253,7 @@ def sample_trajectories_ggm_to_file(dataframe,
                     graph_trajectory = trajectory_to_file(n_samples=T,
                                                           randomize=r,
                                                           seqdist=sd,
+                                                          seqdist_graph=sd_graph,
                                                           reset_cache=reset_cache,
                                                           output_directory=output_directory,
                                                           **args)
@@ -195,11 +268,12 @@ def sample_trajectories_ggm_parallel(dataframe,
                                      delta=[1.0,],
                                      reset_cache=True,
                                      reps=1,
+                                     graph_prior=['mbc', 2.0, 4.0],
                                      **args):
     p = dataframe.shape[1]
     if D is None:
         D = np.identity(p)
-
+    sd_graph = get_prior(graph_prior)
     queue = multiprocessing.Queue()
     processes = []
     rets = []
@@ -211,7 +285,7 @@ def sample_trajectories_ggm_parallel(dataframe,
                     sd.init_model(np.asmatrix(dataframe), D, d, {})
                     print("Starting: " + str((T, r, str(sd), reset_cache, True)))
                     proc = Process(target=trajectory_to_queue,
-                                   args=(T, r, sd,
+                                   args=(T, r, sd, sd_graph,
                                          queue, reset_cache, True))
                     processes.append(proc)
                     proc.start()
@@ -246,6 +320,7 @@ def sample_trajectory_loglin(dataframe,
                              n_samples,
                              randomize,
                              pseudo_obs=1.0,
+                             graph_prior=['mbc', 2.0, 4.0],
                              reset_cache=True, **args):
     p = dataframe.shape[1]
     n_levels = np.array(dataframe.columns.get_level_values(1), dtype=int)
@@ -253,7 +328,13 @@ def sample_trajectory_loglin(dataframe,
 
     sd = seqdist.LogLinearJTPosterior()
     sd.init_model(dataframe.to_numpy(), pseudo_obs, levels, {})
-    return sample_trajectory(n_samples, randomize, sd, reset_cache=reset_cache, **args)
+    sd_graph = get_prior(graph_prior)
+    return sample_trajectory(n_samples,
+                             randomize,
+                             sd,
+                             sd_graph,
+                             reset_cache=reset_cache,
+                             **args)
 
 
 def sample_trajectories_loglin_to_file(dataframe,
@@ -262,13 +343,14 @@ def sample_trajectories_loglin_to_file(dataframe,
                                        pseudo_obs=[1.0, ],
                                        reset_cache=True,
                                        reps=1,
+                                       graph_prior=['mbc', 2.0, 4.0],
                                        output_directory=".",
                                        **args):
     p = dataframe.shape[1]
     n_levels = np.array(dataframe.columns.get_level_values(1), dtype=int)
     levels = np.array([range(l) for l in n_levels])
     dt = dataframe.to_numpy()
-   
+    sd_graph = get_prior(graph_prior)
     graph_trajectories = []
     for _ in range(reps):
         for T in n_samples:
@@ -279,6 +361,7 @@ def sample_trajectories_loglin_to_file(dataframe,
                     graph_trajectory = trajectory_to_file(n_samples=T,
                                                           randomize=r,
                                                           seqdist=sd,
+                                                          seqdist_graph=sd_graph,
                                                           reset_cache=reset_cache,
                                                           output_directory=output_directory,
                                                           **args)
@@ -291,13 +374,14 @@ def sample_trajectories_loglin_parallel(dataframe,
                                         pseudo_obs=[1.0, ],
                                         reset_cache=True,
                                         reps=1,
+                                        graph_prior=['mbc', 2.0, 4.0],
                                         **args):
 
     p = dataframe.shape[1]
     n_levels = np.array(dataframe.columns.get_level_values(1), dtype=int)
     levels = np.array([range(l) for l in n_levels])
     dt = dataframe.to_numpy()
-    
+    sd_graph = get_prior(graph_prior)
     queue = multiprocessing.Queue()
     processes = []
     rets = []
@@ -310,7 +394,7 @@ def sample_trajectories_loglin_parallel(dataframe,
                     print("Starting: " + str((T, r, p, str(sd),
                                               reset_cache, True)))
                     proc = Process(target=trajectory_to_queue,
-                                   args=(T, r, sd,
+                                   args=(T, r, sd, sd_graph,
                                          queue, reset_cache, True))
                     processes.append(proc)
                     proc.start()
@@ -339,53 +423,12 @@ def sample_trajectories_loglin_parallel(dataframe,
                                )
     return rets
         
-def trajectory_to_file(n_samples,
-                       randomize,
-                       seqdist,
-                       reset_cache=True,
-                       output_directory=".",
-                       reseed=False,
-                       **args):
-    """ Writes the trajectory of graphs generated by particle Gibbs to file.
-
-    Args:
-        n_samples (int): Number of Gibbs iterations (samples)
-        seq_dist (SequentialJTDistributions): the distribution to be sampled from
-        filename_prefix (string): prefix to the filename
-
-    Returns:
-        mcmctraj.Trajectory: Markov chain of underlying graphs of the junction trees sampled.
-
-    """
-    if reseed is True:
-        np.random.seed()
-
-    #print (n_particles, alpha, beta, radius, n_samples, str(seqdist), reset_cache)
-    graph_trajectory = sample_trajectory(n_samples,
-                                         randomize,
-                                         seqdist,
-                                         reset_cache=reset_cache,
-                                         **args)
-    output_filename = output_format = None
-    if "output_directory" in args:
-        output_directory = args["output_directory"]
-    if "output_filename" in args:
-        output_filename = args["output_filename"]
-    if "output_format" in args:
-        output_format = args["output_format"]
-
-    aux.write_traj_to_file(graph_trajectory,
-                           dirt=output_directory,
-                           output_filename=output_filename,
-                           output_format=output_format
-    )
-    return graph_trajectory
-
   
 
 def trajectory_to_queue(n_samples,
                         randomize,
                         seqdist,
+                        seqdist_graph,
                         queue,
                         reset_cache=True,
                         reseed=False):
@@ -402,32 +445,7 @@ def trajectory_to_queue(n_samples,
     graph_trajectory = sample_trajectory(n_samples,
                                          randomize,
                                          seqdist,
+                                         seqdist_graph,
                                          reset_cache=reset_cache)
     queue.put(graph_trajectory)
 
-
-def max_likelihood_gmm(dataframe, graph, delta=1.0, jt=None):
-    p = dataframe.shape[1]
-    D = np.identity(p)
-    sd = seqdist.GGMJTPosterior()
-    sd.init_model(np.asmatrix(dataframe), D, delta, {})
-    # graph = ar_graph.copy()
-    if not jt:
-        jt = dlib.junction_tree(graph)
-        assert (jtlib.is_junction_tree(jt))
-
-    loglike_jt = sd.log_likelihood(jt) - \
-        jtlib.log_n_junction_trees(jt, jtlib.separators(jt))
-
-    
-    return loglike_jt, sd.log_likelihood(jt)
-
-
-
-def gen_ggm_trajectory(dataframe, n_samples, D=None, delta=1.0, cache={}, alpha=0.5, beta=0.5, **args):
-    p = dataframe.shape[1]
-    if D is None:
-        D = np.identity(p)
-    sd = seqdist.GGMJTPosterior()
-    sd.init_model(np.asmatrix(dataframe), D, delta, cache)
-    return mh(alpha, beta, n_samples, sd)
