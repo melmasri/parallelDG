@@ -147,11 +147,11 @@ def sample_trajectory(n_samples,
 def get_prior(graph_prior):
     sd = None
     if graph_prior[0] == "mbc":
-        alpha = graph_prior[1]
-        beta = graph_prior[2]
+        alpha = int(graph_prior[1])
+        beta = int(graph_prior[2])
         sd = seqdist.ModifiedBornnCaron(alpha, beta)
     if graph_prior[0] == "edgepenalty":
-        alpha = graph_prior[1]
+        alpha = int(graph_prior[1])
         sd = seqdist.EdgePenalty(alpha)
     # default prior
     if not sd:
