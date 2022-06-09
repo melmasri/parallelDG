@@ -77,7 +77,7 @@ class JunctionTree(nx.Graph):
         return lm
 
     def to_graph(self):
-        """ Returns the graph underlying the junction tree tree.
+        """ Returns the graph underlying the junction tree.
 
         Args:
             tree (NetworkX graph): A junction tree
