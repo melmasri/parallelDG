@@ -69,6 +69,29 @@ class ModifiedBornnCaron(SequentialJTDistribution):
         return new - old
 
 
+
+class GraphUniform(SequentialJTDistribution):
+    """  Uniform sampling over decomposable graphs, i.e pi(G) ~ 1/|jt(G)|
+    """
+    def __init__(self):
+        None
+
+    def log_prior(self, cliques, seperators):
+        return 0.0
+
+    def log_prior_partial(self, clq, sep):
+        return 0.0
+
+    def log_ratio(self,
+                  old_cliques,
+                  old_separators,
+                  new_cliques,
+                  new_separators,
+                  old_JT,
+                  new_JT):
+        return 0.0
+
+
 class EdgePenalty(SequentialJTDistribution):
     """ Edge penalty prior, as P(G) = prod{clq, sep} f(clq) / f(sep). 
         f(x) = exp(- alpha * |x|(|x| -1))
@@ -123,6 +146,14 @@ class UniformJTDistribution(SequentialJTDistribution):
                   old_JT,
                   new_JT):
         return 0.0
+
+    def log_likelihood_partial(self, cliques, separators):
+        return 0.0
+
+    def log_likelihood(self, jt):
+        return 0.0
+
+
 
 
 class CondUniformJTDistribution(SequentialJTDistribution):

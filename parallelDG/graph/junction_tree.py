@@ -14,6 +14,7 @@ class JunctionTree(nx.Graph):
         self.separators = None
         self.num_graph_nodes = None
         self.latent = False
+        self.clique_hard_threshold = None
 
     def log_nu(self, sep):
         if sep not in self.log_nus:

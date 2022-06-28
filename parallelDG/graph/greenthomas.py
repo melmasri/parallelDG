@@ -10,7 +10,6 @@ def disconnect_select_subsets(tree, c):
     N = np.random.randint(1, high=M)
     X = frozenset(np.random.choice(list(c), size=N, replace=False))
     Y = frozenset(np.random.choice(list(c-X), size=M-N, replace=False))
-
     #print "X: " + str(X)
     #print "Y: " + str(Y)
     return (X, Y)
@@ -152,7 +151,7 @@ def disconnect_d(tree, c, X, Y, CX, CY):
 
 
 def disconnect_move(tree):
-    C = np.random.choice(tree.nodes())
+    C = np.random.choice(list(tree.nodes()))
     if len(C) < 2:
         #print "|C| < 2"
         return False

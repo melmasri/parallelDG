@@ -37,10 +37,10 @@ def boundary_cliques_node(tree, node, ret_edges=False):
     if len(T) == 2 and len(boundary_cliques) == 2:
         dumble = True
     if ret_edges:
-        if len(T)>1:   
+        if len(T) > 1:  
             return {x: list(T.neighbors(x))[0] for x in boundary_cliques}, dumble
         else:
-            return {x: frozenset([]) for x in boundary_cliques}, dumble
+            return {x: frozenset([]) for x in boundary_cliques if x != node}, dumble
     else:
         return boundary_cliques, dumble
 
@@ -64,7 +64,7 @@ def neighboring_cliques_node(tree, node, empty_node=False):
                 else:
                     nei_cliques[subnode] = [nei]
     # adding single-clique node
-    if tree.latent and empty_node and len(tree) < 2*tree.num_graph_nodes:
+    if tree.latent and empty_node and len(tree) < tree.clique_hard_threshold:
         if node not in T:
             r = np.random.choice(len(T))
             subnode = list(T.nodes())[r]
@@ -199,9 +199,6 @@ def disconnect(tree, old_clique, new_clique):
                     break
             tree.add_edges_from(edges_to_add)
         tree.remove_node(old_clique)
-    if not tree.latent:
-        update_tree(tree, new_clique)
-
 
 def connect(tree, old_clique, new_clique, anchor_clique=None):
     tree.add_node(new_clique)
@@ -214,25 +211,43 @@ def connect(tree, old_clique, new_clique, anchor_clique=None):
     else:  # empty clique-node
         edges_to_add = [(new_clique, anchor_clique)]
         tree.add_edges_from(edges_to_add)
-    if not tree.latent:
-        update_tree(tree, new_clique)
 
 
-def update_tree(tree, clique):
+def update_tree_connect(tree, clique):
+    """ Updating the junction tree 
+        incase of a connect move
+    """
     cliques_to_remove = []
     edges_to_add = []
     for n in tree.neighbors(clique):
-        if n <= clique:
+        if n <= clique:         # connect case
             [edges_to_add.append((y, clique)) for y in tree.neighbors(n)
              if y != clique]
             cliques_to_remove.append(n)
-        if clique < n:
-            [edges_to_add.append((y, n)) for y in tree.neighbors(clique)
-             if y != n]
-            cliques_to_remove.append(n) 
-            tree.add_edges_from(edges_to_add)
     tree.add_edges_from(edges_to_add)
     tree.remove_nodes_from(cliques_to_remove)
+
+def update_tree_disconnect(tree, clique):
+    """ Updating the junction tree 
+        incase of a disconnect move
+    """
+    cliques_to_remove = []
+    edges_to_add = []
+    for n in tree.neighbors(clique):
+        if clique < n:         # connect case
+            [edges_to_add.append((y, n)) for y in tree.neighbors(clique)
+             if y != n]
+            cliques_to_remove.append(clique)
+            break               #  this is needed
+    tree.add_edges_from(edges_to_add)
+    tree.remove_nodes_from(cliques_to_remove)
+
+    
+def update_tree(tree, clique, move_type):
+    if move_type == 0:          # connect
+        update_tree_connect(tree, clique)
+    else:
+        update_tree_disconnect(tree, clique)
 
 
 def log_prob(n, k, m=0):
@@ -260,7 +275,7 @@ def inverse_proposal_prob(tree, node, new_cliques, move_type):
     else:                       # inverse is connect
         nei_cliques = neighboring_cliques_node(tree, node, False)
         nei_value_len = [len(x) for x in nei_cliques.values()]
-        N = int(np.sum(nei_value_len)) + 1*(len(tree) < tree.num_graph_nodes)
+        N = int(np.sum(nei_value_len)) + 1*(len(tree) < tree.clique_hard_threshold)
     if N < k:
         import pdb;pdb.set_trace()
     return log_prob(N, k, 1), N, k
@@ -300,10 +315,11 @@ def jt_to_graph_connect_move(clique_tupple,
                              node,
                              i=None):
     new_clique = clique_tupple[0]
-    simplix = new_clique - node
+    anchor_clique = clique_tupple[2]
+    simplix = new_clique - anchor_clique - node
     node = list(node)[0]
     # 0 for connection tyep
-    edges_to_add = [(i, 0, (node,y)) for y in set(simplix)]
+    edges_to_add = [(i, 0, (node, y)) for y in set(simplix)]
     return edges_to_add
 
 def jt_to_graph_disconnect_move(clique_tupple,
@@ -311,7 +327,7 @@ def jt_to_graph_disconnect_move(clique_tupple,
                                 i=None):
     old_clq = clique_tupple[1]
     anchor_clq = clique_tupple[2]
-    simplix = old_clq - anchor_clq
+    simplix = old_clq - anchor_clq - node
     node = list(node)[0]
     # 1 for disconnect type
     edges_to_remove = [(i, 1, (node, y)) for y in set(simplix)]
@@ -328,3 +344,14 @@ def is_isomorphic(jt_traj, graph_traj, graph_updates):
         if not nx.is_isomorphic(jtlib.graph(jt_traj[j]), graph_traj[k+1]):
             print("{}, {}".format(k, j))
             break
+
+
+def disconnect_select_subsets(tree, c, node):
+    # 2. choose sets
+    M = np.random.randint(2, high=len(c)+1)
+    N = np.random.randint(1, high=M)
+    X = frozenset(np.random.choice(list(c), size=N, replace=False))
+    Y = frozenset(np.random.choice(list(c-X), size=M-N, replace=False))
+    #print "X: " + str(X)
+    #print "Y: " + str(Y)
+    return (X, Y)

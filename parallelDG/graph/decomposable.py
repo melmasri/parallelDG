@@ -146,6 +146,7 @@ def junction_tree(graph):
     jt.add_nodes_from(T.nodes())
     jt.add_edges_from(T.edges())
     jt.num_graph_nodes = len(graph)
+    jt.clique_hard_threshold = len(graph)
     return jt
 
 
