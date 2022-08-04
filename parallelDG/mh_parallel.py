@@ -575,6 +575,7 @@ def sample_trajectories_ggm_parallel(dataframe,
     queue = multiprocessing.Queue()
     processes = []
     rets = []
+    seed = args.get(seed,None)
     for _ in range(reps):
         for T in n_samples:
             for r in randomize:
