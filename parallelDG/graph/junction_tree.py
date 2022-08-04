@@ -133,6 +133,18 @@ def is_junction_tree(tree):
     return True
 
 
+def n_junction_trees_graph(graph):
+    """ Returns the number of junction trees of a decomposable graph
+    Args: 
+      grpah (networkx): a decomposable grpah
+
+        """
+    import parallelDG.graph.decomposable as dlib
+    seps = dlib.separators(graph)
+    jt = dlib.junction_tree(graph)
+    return int(np.exp(log_n_junction_trees(jt, seps)))
+
+
 def n_junction_trees(p):
     """ Returns the number of junction trees with p internal nodes.
 
