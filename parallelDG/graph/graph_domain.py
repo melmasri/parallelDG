@@ -4,17 +4,17 @@ import scipy.special as sp
 import parallelDG.auxiliary_functions as aux
 
 
-def disconnect_select_subsets(tree, c):
+def disconnect_select_subsets(tree, edge, X):
     # 2. choose sets
-    M = np.random.randint(2, high=len(c)+1)
-    N = np.random.randint(1, high=M)
-    #N = 1
-    X = frozenset(np.random.choice(list(c), size=N, replace=False))
-    Y = frozenset(np.random.choice(list(c-X), size=M-N, replace=False))
-    #Y = frozenset(list(c-X))
+    CY = (edge[1] - edge[0]) - X
+    M = np.random.randint(1, high=len(CY)+1)
+    # 2. choose sets
+    Y = frozenset(np.random.choice(list(CY), size=M, replace=False))
+    #Y = frozenset(CY)
     #print "X: " + str(X)
     #print "Y: " + str(Y)
     return (X, Y)
+
 
 
 def disconnect_get_neighbors(tree, C, X, Y):
@@ -152,16 +152,14 @@ def disconnect_d(tree, c, X, Y, CX, CY):
     return (CX_conn, CY_conn)
 
 
-def disconnect_move(tree):
-    C = np.random.choice(list(tree.nodes()))
-    if len(C) < 2:
-        #print "|C| < 2"
-        return False
-    (X, Y) = disconnect_select_subsets(tree, C)
+def disconnect_move(tree, sep, x):
+    C = sep[1]
+    (X, Y) = disconnect_select_subsets(tree, sep, x)
     neigs = disconnect_get_neighbors(tree, C, X, Y)
 
     if neigs is False:
         #print "Some neighbor intersects both X and Y"
+        #import pdb;pdb.set_trace()
         return False
     else:
         (NX, NY, N) = neigs
@@ -183,14 +181,14 @@ def disconnect_move(tree):
         XSneig = NX | NXS  # CX_disconn_neig
         YSneig = NY | NYS  # CY_disconn_neig
         (CX_conn, CY_conn) = disconnect_a(tree, C, X, Y, CX, CY, XSneig, YSneig)
-        logprob = disconnect_logprob_a(num_cliques, X, Y, S, N)
+        logprob = disconnect_logprob_a(num_cliques, X, Y, S, N, sep)
         return ("a", logprob, X, Y, S, CX_conn, CY_conn)
 
     # case b
     elif CX is not None and CY is None:
         if len(NX) == 1:  # contains only CX
             (CX_conn, CY_conn) = disconnect_b(tree, C, X, Y, CX, CY)
-            logprob = disconnect_logprob_bcd(num_cliques, X, Y, S)
+            logprob = disconnect_logprob_bcd(num_cliques, X, Y, S, sep)
             return ("b", logprob, X, Y, S, CX_conn, CY_conn)
         else:
             #print "NX contains more that one clique so nothing is done"
@@ -200,7 +198,7 @@ def disconnect_move(tree):
     elif CX is None and CY is not None:
         if len(NY) == 1:  # contains only CX
             (CX_conn, CY_conn) = disconnect_c(tree, C, X, Y, CX, CY)
-            logprob = disconnect_logprob_bcd(num_cliques, X, Y, S)
+            logprob = disconnect_logprob_bcd(num_cliques, X, Y, S, sep)
             return ("c", logprob, X, Y, S, CX_conn, CY_conn)
         else:
             #print "NY contains more that one clique so nothing is done"
@@ -210,37 +208,51 @@ def disconnect_move(tree):
     elif CX is not None and CY is not None:
         if len(N) == 0 and len(NY) == 1 and len(NX) == 1:
             (CX_conn, CY_conn) = disconnect_d(tree, C, X, Y, CX, CY)
-            logprob = disconnect_logprob_bcd(num_cliques, X, Y, S)
+            logprob = disconnect_logprob_bcd(num_cliques, X, Y, S,sep)
             return ("d", logprob, X, Y, S, CX_conn, CY_conn)
         else:
             #print "len(N) == 0 and len(NY) == 1 and len(NX) == 1 id False so nothing is changes"
             return False
 
 
-def disconnect_logprob_a(num_cliques, X, Y, S, N):
-    return disconnect_logprob_bcd(num_cliques, X, Y, S) - len(N) * np.log(2)
+def disconnect_logprob_a(num_cliques, X, Y, S, N, sep=None):
+  #  return 0.0
+    return disconnect_logprob_bcd(num_cliques, X, Y, S, sep) - len(N) * np.log(2)
 
 
-def disconnect_logprob_bcd(num_cliques, X, Y, S):
-    C = X | Y | S
-    M = len(X | Y)
-    N = len(X)
-    m = len(C)
+def disconnect_logprob_bcd(num_cliques, X, Y, S, sep=None):
+    if sep: 
+        CY = sep[1] - (sep[1] & sep[0]) - X
+    else:
+        CY = Y
+    N = len(Y)
+    m = len(CY)
     logprob = 0.0
-    logprob += -np.log(num_cliques)
-    logprob += np.log(2) - np.log((m - 1) * (M - 1))
-    logprob += sp.gammaln(N+1) + sp.gammaln(M-N+1) + sp.gammaln(m - M+1) - sp.gammaln(m+1)
+    logprob = -np.log(m)
+    logprob += sp.gammaln(N+1) + sp.gammaln(m-N+1) - sp.gammaln(m+1)
+    #return 0.0
     return logprob
 
 
-def connect_move(tree):
+
+# def disconnect_logprob_bcd(num_cliques, X, Y, S):
+#     C = X | Y | S
+#     N = len(Y)
+#     m = len(C) - 1
+#     logprob = 0.0
+#     logprob = -np.log(m)
+#     logprob += sp.gammaln(N+1) + sp.gammaln(m-N+1)- sp.gammaln(m+1)
+#     #return 0.0
+#     return logprob
+#     # return logprob
+
+
+def connect_move(tree, sep, x):
     num_seps = tree.size()
     if num_seps == 0:
         return False
-
-    (X, Y, CX, CY) = connect_select_subsets(tree)
+    (X, Y, CX, CY) = connect_select_subsets(tree, sep, x)
     logprob = connect_logprob(num_seps, X, Y, CX, CY)
-
     S = CX & CY
     XS = X | S
     YS = Y | S
@@ -250,7 +262,6 @@ def connect_move(tree):
     # print "CX: " + str(CX)
     # print "YS: " + str(YS)
     # print "CY: " + str(CY) 
-
     # a)
     if XS == CX and YS == CY:
         (CX_disconn, CY_disconn, XSneig, YSneig) = connect_a(tree, S, X, Y, CX, CY)
@@ -269,21 +280,18 @@ def connect_move(tree):
         return ("d", logprob, X, Y, S, CX_disconn, CY_disconn)
 
 
-def connect_select_subsets(tree):
+def connect_select_subsets(tree, edge, X):
+    """ One to many subset selection"""
     # 1. choose separator
-    SJ = tree.size()
-    edgeind = np.random.randint(tree.size())
-    edge = list(tree.edges())[edgeind]
     S = edge[0] & edge[1]
     CX = edge[0]
     CY = edge[1]
-    NumX = np.random.randint(len(CX - S)) + 1
     NumY = np.random.randint(len(CY - S)) + 1
-    #NumX = 1
-    X = frozenset(np.random.choice(list(CX - S), NumX, replace=False))
+    # x = frozenset(np.random.choice(list(CX - S), NumX, replace=False))
     Y = frozenset(np.random.choice(list(CY - S), NumY, replace=False))
     #Y = frozenset(list(CY - S))
     return (X, Y, CX, CY)
+    
 
 
 def connect_b(tree, S, X, Y, CX, CY):
@@ -332,18 +340,31 @@ def connect_d(tree, S, X, Y, CX, CY):
     return (CX_disconn, CY_disconn)
 
 
+# def connect_logprob(num_seps, X, Y, CX, CY):
+#     S = CX & CY
+#     logprob = 0.0
+#     s = len(S)
+#     SJ = num_seps
+#     NX = len(X)
+#     NY = len(Y)
+#     mX = len(CX)
+#     mY = len(CY)
+#     #logprob += -np.log(SJ)
+#     logprob += -np.log(mX - s)
+#     logprob += sp.gammaln(NX + 1) + sp.gammaln(mX - s - NX + 1) - sp.gammaln(mX - s + 1)
+#     logprob += -np.log(mY - s)
+#     logprob += sp.gammaln(NY + 1) + sp.gammaln(mY - s - NY + 1) - sp.gammaln(mY - s + 1)
+#     #return -np.log(SJ)
+#     # return 0.0
+#    return logprob
+
 def connect_logprob(num_seps, X, Y, CX, CY):
     S = CX & CY
-    logprob = 0.0
     s = len(S)
-    SJ = num_seps
-    NX = len(X)
-    NY = len(Y)
-    mX = len(CX)
     mY = len(CY)
-    logprob += -np.log(SJ)
-    logprob += -np.log(mX - s)
-    logprob += sp.gammaln(NX + 1) + sp.gammaln(mX - s - NX + 1) - sp.gammaln(mX - s + 1)
+    NY = len(Y)
+    logprob = 0.0
     logprob += -np.log(mY - s)
     logprob += sp.gammaln(NY + 1) + sp.gammaln(mY - s - NY + 1) - sp.gammaln(mY - s + 1)
+    #return 0.0
     return logprob

@@ -11,6 +11,8 @@ from pandas.plotting import autocorrelation_plot
 from tqdm import tqdm
 import random
 import datetime
+import itertools as its
+import copy
 
 from sys import platform as sys_pf
 if sys_pf == 'darwin':
@@ -21,14 +23,18 @@ def plot_heatmap(heatmap, cbar=False, annot=False, xticklabels=1, yticklabels=1)
     mask = np.zeros_like(heatmap)
     mask[np.triu_indices_from(mask)] = True
     with sns.axes_style("white"):
-        sns.heatmap(heatmap, mask=mask, annot=annot,
-                    cmap="Blues",
-                    vmin=0.0, vmax=1.0, square=True,
-                    cbar=cbar,
-                    xticklabels=xticklabels, yticklabels=yticklabels)
+        ax = sns.heatmap(heatmap, mask=mask, annot=annot,
+                         cmap="Blues",
+                         vmin=0.0, vmax=1.0, square=True,
+                         cbar=cbar,
+                         xticklabels=xticklabels,
+                         yticklabels=yticklabels)
+
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=0)
+        
     #sns.set_style("whitegrid")
     cax = plt.gcf().axes[-1]
-    cax.tick_params(labelsize=6)
+    cax.tick_params(labelsize=12)
 
 
 def random_subset(A):
@@ -388,3 +394,138 @@ def write_traj_to_file(graph_trajectory,
 
     print("wrote file: " + filename)
  
+
+
+def powerset(iterable):
+    "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
+    s = list(iterable)
+    return its.chain.from_iterable(its.combinations(s, r) for r in range(len(s)+1))
+
+def edges_powerset(p):
+    "return all graphs of size p"
+    return list(its.combinations(list(range(p)), 2))
+
+
+def hash_graph(G):
+    "hashing a graph by ordering the edge set"
+    ed = [tuple(sorted(e)) for e in G.edges()]
+    return hash(str(sorted(ed)))
+
+def most_sampled_graph(traj):
+    """ Returns the most sampled graph from a graph trajectories"""
+    graph_dict = {}
+    for g in traj:
+        if not g:
+            continue
+        b = hash_graph(g)
+        if b in graph_dict:
+            graph_dict[b]['count'] += 1.0
+        else:
+            graph_dict[b] = {'count': 1.0, 'g': g}
+
+    key = max(graph_dict, key=lambda k: graph_dict[k]['count'])
+    return graph_dict[key]
+
+
+def count_decomposable_graphs(size, traj, decomp_index_table):
+    "counting the number of decomposable graphs"
+    p = size
+    graph_dict = copy.deepcopy(decomp_index_table)
+    prev_hash = None # to remove repeated graph, where no traj changes
+    for g in traj:
+        if not g:
+            continue
+        b = hash_graph(g)
+        if b == prev_hash:
+            continue
+        prev_hash = b
+        c = graph_dict[b]['count']
+        graph_dict[b]['count'] = 1 + c
+                                
+    return graph_dict
+
+
+def pdf_plot(x):
+    "plotting the probability density function"
+    a = float(np.sum(x))
+    b = np.cumsum(x)
+    ax = pd.Series(b/a).plot()
+    plt.plot([0, 1], [0, 1], transform=ax.transAxes)
+
+
+def acceptance_ratio(traj):
+    x = map(hash_graph, traj)
+    # [hash_graph(g) for g in traj]
+    dx = (np.diff(x)!=0) * 1.0
+    ar = np.mean(dx, dtype=float)
+    par = np.cumsum(dx, dtype=float)/(np.array(range(len(dx))) + 1.0)
+    print('Acceptance ratio {:2f}'.format(ar))
+    return ar, par
+
+def autocorrelation_plot(series,
+                         lower=None,
+                         upper=None,
+                         lag=None,
+                         ax=None, **kwds):
+    # require scipy
+    import scipy
+    import matplotlib.pyplot as plt
+
+    return_series = kwds.get('return_series', False)
+    n = len(series)
+    data = np.asarray(series)
+
+    mean = np.mean(data)
+    c0 = np.sum((data - mean) ** 2) / float(n)
+
+    def r(h):
+        return ((data[: n - h] - mean) * (data[h:] - mean)).sum() / float(n) / c0
+    if lag:
+        x = np.arange(lag) + 1
+    else:
+        x = np.arange(n) + 1
+    y = [r(loc) for loc in x]
+    if return_series:
+        return y
+    if ax is None:
+        ax = plt.gca(xlim=(1, np.max(x)), ylim=(-1.0, 1.0))
+    # customize the z's
+    if lower:
+        z95, z99 = scipy.stats.t.ppf((1 + np.array([lower,upper])) / 2., 1e9)
+
+        ax.axhline(y=z99 / np.sqrt(n), linestyle="--", color="grey")
+        ax.axhline(y=z95 / np.sqrt(n), color="grey")
+        ax.axhline(y=-z95 / np.sqrt(n), color="grey")
+        ax.axhline(y=-z99 / np.sqrt(n), linestyle="--", color="grey")
+    
+    ax.axhline(y=0.0, color="grey")
+    ax.set_xlabel("Lag")
+    ax.set_ylabel("Autocorrelation")
+    ax.plot(x, y, **kwds)
+    if "label" in kwds:
+        ax.legend()
+    ax.grid()
+    return ax
+
+    
+def filter_decomposable_graphs(graphs, graph_size):
+    """ returns decomposable graphs out of powerset of graphs 
+        and numer of junction trees per graph
+    """
+    decomp = dict()
+    import parallelDG.graph.junction_tree as jtlib
+    for a in graphs:
+        a = list(a)
+        G = nx.Graph()
+        G.add_nodes_from(range(graph_size))
+        G.add_edges_from(a)
+        if nx.is_chordal(G): 
+            b = hash_graph(G)
+            n_jt = jtlib.n_junction_trees_graph(G)
+            decomp[b] = {'count': 0, 'nedges': G.size(),
+                         'g': a,
+                         'n_jt':
+                         n_jt, 'nnodes': graph_size}
+        G.clear()
+    return decomp
+
