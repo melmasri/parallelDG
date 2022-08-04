@@ -79,11 +79,9 @@ class Trajectory:
 
     def set_init_graph(self, init_graph):
         self.init_graph = init_graph
-        self.init_jt = dlib.junction_tree(init_graph)
 
     def set_init_jt(self, init_jt):
         self.init_jt = init_jt
-        self.init_graph = jtlib.graph(init_jt)
 
     def jt_to_graph_updates(self):
         # (iteration, move_type, node, (new_clq, old_clq, anchor_clq))
@@ -96,6 +94,8 @@ class Trajectory:
             else:               # disconnect
                 g += pmlib.jt_to_graph_disconnect_move(m[3], m[2], m[0])
         self.set_graph_updates(g)
+
+
 
     def set_graph_trajectories(self):
         if not self.graph_updates:
@@ -149,11 +149,10 @@ class Trajectory:
 
 
     def empirical_distribution(self, from_index=0):
-        length = len(self.trajectory) - from_index
-        graph_dist = gdist.GraphDistribution()
         if not self.trajectory:
             self.set_graph_trajectories()
-            
+            length = len(self.trajectory) - from_index
+        graph_dist = gdist.GraphDistribution()
         for g in self.trajectory[from_index:]:
             graph_dist.add_graph(g, 1./length)
                 
