@@ -12,12 +12,14 @@ import parallelDG.distributions.sequential_junction_tree_distributions as seqdis
 import parallelDG.graph.trajectory as mcmctraj
 import parallelDG.graph.junction_tree as jtlib
 import parallelDG.graph.decomposable as dlib
-import parallelDG.graph.greenthomas as aglib
+import parallelDG.graph.graph_domain as aglib
 from parallelDG import auxiliary_functions as aux
+import parallelDG.graph.parallel_moves as ndlib
 
-
-def sample_trajectory(n_samples, randomize, sd):
+def sample_trajectory_single_move(n_samples, randomize, sd, **args):
     graph = nx.Graph()
+    seed = args.get('seed', time.time())
+    np.random.seed(seed)
     graph.add_nodes_from(range(sd.p))
     jt = dlib.junction_tree(graph)
     assert (jtlib.is_junction_tree(jt))
@@ -26,7 +28,11 @@ def sample_trajectory(n_samples, randomize, sd):
     jt_traj[0] = jt
     graphs[0] = jtlib.graph(jt)
     log_prob_traj = [None] * n_samples
-
+    num_nodes = sd.p
+    jt.latent = False
+    r0 = [None] * n_samples
+    r1 = [None] * n_samples
+    
     gtraj = mcmctraj.Trajectory()
     gtraj.set_sampling_method({"method": "mh",
                                "params": {"samples": n_samples,
@@ -34,7 +40,6 @@ def sample_trajectory(n_samples, randomize, sd):
                                })
 
     gtraj.set_sequential_distribution(sd)
-
     log_prob_traj[0] = 0.0
     log_prob_traj[0] = sd.log_likelihood(jt_traj[0])
     log_prob_traj[0] += -jtlib.log_n_junction_trees(jt_traj[0], jtlib.separators(jt_traj[0]))
@@ -42,7 +47,6 @@ def sample_trajectory(n_samples, randomize, sd):
     accept_traj = [0] * n_samples
 
     MAP_graph = (graphs[0], log_prob_traj[0])
-
 
     for i in tqdm(range(1, n_samples), desc="Metropolis-Hastings samples"):
         if log_prob_traj[i-1] > MAP_graph[1]:
@@ -55,22 +59,40 @@ def sample_trajectory(n_samples, randomize, sd):
 
         r = np.random.randint(2)  # Connect / disconnect move
         num_seps = jt.size()
+        num_cliques = jt.order()
         log_p1 = log_prob_traj[i - 1]
+        node = frozenset([np.random.randint(num_nodes)])
         if r == 0:
             # Connect move
-            num_cliques = jt.order()
-            conn = aglib.connect_move(jt)  # need to move to calculate posterior
-            seps_prop = jtlib.separators(jt)
-            log_p2 = sd.log_likelihood(jt) - jtlib.log_n_junction_trees(jt, seps_prop)
-            if not conn:
+            partitions, num_partitions = ndlib.paritioned_connect_moves(jt, node)
+            np.random.shuffle(partitions)
+            #print('----')
+            #print(jt.edges())
+            if not partitions:
                 log_prob_traj[i] = log_prob_traj[i-1]
                 graphs[i] = graphs[i-1]
                 continue
+            sep = partitions[0]
+            #  edgeind = np.random.randint(jt.size())
+            #  sep = list(jt.edges())[edgeind]
+            #  node = frozenset([np.random.choice(list(sep[0] - sep[1]))])
+            num_cliques = jt.order()
+            conn = aglib.connect_move(jt, sep, node)  # need to move to calculate posterior
+            seps_prop = jtlib.separators(jt)
+            log_p2 = sd.log_likelihood(jt) - jtlib.log_n_junction_trees(jt, seps_prop)
+            _, num_revers_partitions = ndlib.paritioned_disconnect_moves(jt, node)  # + len(ndlib.paritioned_connect_moves(jt, node)) 
+            log_p2 -= np.log(num_partitions)
+            log_p1 -= np.log(num_revers_partitions)
             C_disconn = conn[2] | conn[3] | conn[4]
             if conn[0] == "a":
                 (case, log_q12, X, Y, S, CX_disconn, CY_disconn, XSneig, YSneig) = conn
                 (NX_disconn, NY_disconn, N_disconn) = aglib.disconnect_get_neighbors(jt, C_disconn, X, Y)  # TODO: could this be done faster?
-                log_q21 = aglib.disconnect_logprob_a(num_cliques - 1, X, Y, S, N_disconn)
+                #import pdb; pdb.set_trace()
+                if  NX_disconn: 
+                    sep_disconn = (list(NX_disconn)[0], C_disconn)
+                else:
+                    sep_disconn = (frozenset([]), C_disconn)
+                log_q21 = aglib.disconnect_logprob_a(num_cliques - 1, X, Y, S, N_disconn, sep_disconn)
                 #print log_p2, log_q21, log_p1, log_q12
                 alpha = min(np.exp(log_p2 + log_q21 - log_p1 - log_q12), 1)
                 #print alpha
@@ -78,7 +100,7 @@ def sample_trajectory(n_samples, randomize, sd):
                 if samp == 1:
                     # print "Accept"
                     accept_traj[i] = 1
-                    log_prob_traj[i] = log_p2
+                    log_prob_traj[i] = log_p2 + np.log(num_partitions)
                     graphs[i] = jtlib.graph(jt)  # TODO: Improve.
                 else:
                     #print "Reject"
@@ -89,13 +111,15 @@ def sample_trajectory(n_samples, randomize, sd):
 
             elif conn[0] == "b":
                 (case, log_q12, X, Y, S, CX_disconn, CY_disconn) = conn
-                log_q21 = aglib.disconnect_logprob_bcd(num_cliques, X, Y, S)
+                sep_disconn = (CX_disconn, Y | X | S)
+                log_q21 = aglib.disconnect_logprob_bcd(num_cliques, X, Y, S, sep_disconn)
                 alpha = min(np.exp(log_p2 + log_q21 - log_p1 - log_q12), 1)
                 samp = np.random.choice(2, 1, p=[(1 - alpha), alpha])
+
                 if samp == 1:
                     #print "Accept"
                     accept_traj[i] = 1
-                    log_prob_traj[i] = log_p2
+                    log_prob_traj[i] = log_p2 + np.log(num_partitions)
                     graphs[i] = jtlib.graph(jt) # TODO: Improve.
                 else:
                     #print "Reject"
@@ -106,13 +130,18 @@ def sample_trajectory(n_samples, randomize, sd):
 
             elif conn[0] == "c":
                 (case, log_q12, X, Y, S, CX_disconn, CY_disconn) = conn
-                log_q21 = aglib.disconnect_logprob_bcd(num_cliques, X, Y, S)
+                (NX_disconn, NY_disconn, N_disconn) = aglib.disconnect_get_neighbors(jt, C_disconn, X, Y)  # TODO: could this be done faster?
+                if  NX_disconn: 
+                    sep_disconn = (list(NX_disconn)[0], C_disconn)
+                else:
+                    sep_disconn = (frozenset([]), X | Y | S)
+                log_q21 = aglib.disconnect_logprob_bcd(num_cliques, X, Y, S, sep_disconn)
                 alpha = min(np.exp(log_p2 + log_q21 - log_p1 - log_q12), 1)
                 samp = np.random.choice(2, 1, p=[(1 - alpha), alpha])
                 if samp == 1:
                     accept_traj[i] = 1
                     #print "Accept"
-                    log_prob_traj[i] = log_p2
+                    log_prob_traj[i] = log_p2 + np.log(num_partitions)
                     graphs[i] = jtlib.graph(jt) # TODO: Improve.
                 else:
                     #print "Reject"
@@ -123,13 +152,14 @@ def sample_trajectory(n_samples, randomize, sd):
 
             elif conn[0] == "d":
                 (case, log_q12, X, Y, S,  CX_disconn, CY_disconn) = conn
-                log_q21 = aglib.disconnect_logprob_bcd(num_cliques + 1, X, Y, S)
+                sep_disconn = (CX_disconn, X | Y | S)
+                log_q21 = aglib.disconnect_logprob_bcd(num_cliques + 1, X, Y, S, sep_disconn)
                 alpha = min(np.exp(log_p2 + log_q21 - log_p1 - log_q12), 1)
                 samp = np.random.choice(2, 1, p=[(1 - alpha), alpha])
                 if samp == 1:
                     accept_traj[i] = 1
                     #print "Accept"
-                    log_prob_traj[i] = log_p2
+                    log_prob_traj[i] = log_p2 + np.log(num_partitions)
                     graphs[i] = jtlib.graph(jt) # TODO: Improve.
                 else:
                     #print "Reject"
@@ -140,85 +170,123 @@ def sample_trajectory(n_samples, randomize, sd):
 
         elif r == 1:
             # Disconnect move
-            disconnect = aglib.disconnect_move(jt)  # need to move to calculate posterior
+            partitions, num_partitions = ndlib.paritioned_disconnect_moves(jt, node)
+            np.random.shuffle(partitions)
+            if not partitions:
+                log_prob_traj[i] = log_prob_traj[i-1]
+                graphs[i] = graphs[i-1]
+                #import pdb;pdb.set_trace()
+                continue
+            sep = partitions[0]
+            #  GT selection
+            # C = np.random.choice(list(jt.nodes()))
+            # if len(C) < 2:
+            #     log_prob_traj[i] = log_prob_traj[i-1]
+            #     graphs[i] = graphs[i-1]
+            #     continue
+            # jtn = list(jt.neighbors(C))
+            # if jtn:
+            #     C1 = np.random.choice(jtn)
+            #     sep = (C1, C)
+            #     if C1 & C:
+            #         node = frozenset([np.random.choice(list(sep[0] & sep[1]))])
+            #     else:
+            #         node = frozenset([np.random.choice(list(C))])
+            # else:
+            #     sep = (frozenset([]), C)
+            #     node = frozenset([np.random.choice(list(C))])
+            
+            #  import pdb; pdb.set_trace()
+            disconnect = aglib.disconnect_move(jt, sep, node)
+            #import pdb; pdb.set_trace() 
             seps_prop = jtlib.separators(jt)
             log_p2 = sd.log_likelihood(jt) - jtlib.log_n_junction_trees(jt, seps_prop)
-
-            #assert(jtlib.is_junction_tree(jt))
-            #print "disconnect"
-            if disconnect is not False:
-                if disconnect[0] == "a":
-                    (case, log_q12, X, Y, S, CX_conn, CY_conn) = disconnect
-                    log_q21 = aglib.connect_logprob(num_seps + 1, X, Y, CX_conn, CY_conn)
-                    alpha = min(np.exp(log_p2 + log_q21 - log_p1 - log_q12), 1)
-                    samp = np.random.choice(2, 1, p=[(1 - alpha), alpha])
-                    if samp == 1:
-                        accept_traj[i] = 1
-                        #print "Accept"
-                        log_prob_traj[i] = log_p2
-                        graphs[i] = jtlib.graph(jt) # TODO: Improve.
-                    else:
-                        #print "Reject"
-                        aglib.connect_a(jt, S, X, Y, CX_conn, CY_conn)
-                        log_prob_traj[i] = log_prob_traj[i-1]
-                        graphs[i] = graphs[i-1]
-                        continue
-
-                elif disconnect[0] == "b":
-                    (case, log_q12, X, Y, S, CX_conn, CY_conn) = disconnect
-                    log_q21 = aglib.connect_logprob(num_seps, X, Y, CX_conn, CY_conn)
-                    alpha = min(np.exp(log_p2 + log_q21 - log_p1 - log_q12), 1)
-                    samp = np.random.choice(2, 1, p=[(1 - alpha), alpha])
-                    if samp == 1:
-                        accept_traj[i] = 1
-                        #print "Accept"
-                        log_prob_traj[i] = log_p2
-                        graphs[i] = jtlib.graph(jt) # TODO: Improve.
-                    else:
-                        #print "Reject"
-                        aglib.connect_b(jt, S, X, Y, CX_conn, CY_conn)
-                        log_prob_traj[i] = log_prob_traj[i-1]
-                        graphs[i] = graphs[i-1]
-                        continue
-
-                elif disconnect[0] == "c":
-                    (case, log_q12, X, Y, S, CX_conn, CY_conn) = disconnect
-                    log_q21 = aglib.connect_logprob(num_seps, X, Y, CX_conn, CY_conn)
-                    alpha = min(np.exp(log_p2 + log_q21 - log_p1 - log_q12), 1)
-                    samp = np.random.choice(2, 1, p=[(1 - alpha), alpha])
-                    if samp == 1:
-                        accept_traj[i] = 1
-                        #print "Accept"
-                        log_prob_traj[i] = log_p2
-                        graphs[i] = jtlib.graph(jt) # TODO: Improve.
-                    else:
-                        #print "Reject"
-                        aglib.connect_c(jt, S, X, Y, CX_conn, CY_conn)
-                        log_prob_traj[i] = log_prob_traj[i-1]
-                        graphs[i] = graphs[i-1]
-                        continue
-
-                elif disconnect[0] == "d":
-                    (case, log_q12, X, Y, S, CX_conn, CY_conn) = disconnect
-                    log_q21 = aglib.connect_logprob(num_seps - 1, X, Y, CX_conn, CY_conn)
-                    alpha = min(np.exp(log_p2 + log_q21 - log_p1 - log_q12), 1)
-                    samp = np.random.choice(2, 1, p=[(1 - alpha), alpha])
-                    if samp == 1:
-                        #print "Accept"
-                        accept_traj[i] = 1
-                        log_prob_traj[i] = log_p2
-                        graphs[i] = jtlib.graph(jt) # TODO: Improve.
-                    else:
-                        #print "Reject"
-                        aglib.connect_d(jt, S, X, Y, CX_conn, CY_conn)
-                        log_prob_traj[i] = log_prob_traj[i-1]
-                        graphs[i] = graphs[i-1]
-                        continue
-            else:
+            _, num_revers_partitions = ndlib.paritioned_connect_moves(jt, node)
+            log_p2 -= np.log(num_partitions)
+            log_p1 -= np.log(num_revers_partitions)
+            if not disconnect: 
                 log_prob_traj[i] = log_prob_traj[i-1]
                 graphs[i] = graphs[i-1]
                 continue
-        #print(np.mean(accept_traj[:i]))
+
+            if disconnect[0] == "a":
+                (case, log_q12, X, Y, S, CX_conn, CY_conn) = disconnect
+                log_q21 = aglib.connect_logprob(num_seps + 1, X, Y, CX_conn, CY_conn)
+                alpha = min(np.exp(log_p2 + log_q21 - log_p1 - log_q12), 1)
+                samp = np.random.choice(2, 1, p=[(1 - alpha), alpha])
+                if samp == 1:
+                    accept_traj[i] = 1
+                    #print "Accept"
+                    log_prob_traj[i] = log_p2 + np.log(num_partitions)
+                    graphs[i] = jtlib.graph(jt) # TODO: Improve.
+                else:
+                    #print "Reject"
+                    aglib.connect_a(jt, S, X, Y, CX_conn, CY_conn)
+                    log_prob_traj[i] = log_prob_traj[i-1]
+                    graphs[i] = graphs[i-1]
+                    continue
+
+            elif disconnect[0] == "b":
+                (case, log_q12, X, Y, S, CX_conn, CY_conn) = disconnect
+                log_q21 = aglib.connect_logprob(num_seps, X, Y, CX_conn, CY_conn)
+                alpha = min(np.exp(log_p2 + log_q21 - log_p1 - log_q12), 1)
+                samp = np.random.choice(2, 1, p=[(1 - alpha), alpha])
+                if samp == 1:
+                    accept_traj[i] = 1
+                    #print "Accept"
+                    log_prob_traj[i] = log_p2 + np.log(num_partitions)
+                    graphs[i] = jtlib.graph(jt) # TODO: Improve.
+                else:
+                    #print "Reject"
+                    aglib.connect_b(jt, S, X, Y, CX_conn, CY_conn)
+                    log_prob_traj[i] = log_prob_traj[i-1]
+                    graphs[i] = graphs[i-1]
+                    continue
+
+            elif disconnect[0] == "c":
+                (case, log_q12, X, Y, S, CX_conn, CY_conn) = disconnect
+                log_q21 = aglib.connect_logprob(num_seps, X, Y, CX_conn, CY_conn)
+                alpha = min(np.exp(log_p2 + log_q21 - log_p1 - log_q12), 1)
+                samp = np.random.choice(2, 1, p=[(1 - alpha), alpha])
+                if samp == 1:
+                    accept_traj[i] = 1
+                    #print "Accept"
+                    log_prob_traj[i] = log_p2 + np.log(num_partitions)
+                    graphs[i] = jtlib.graph(jt) # TODO: Improve.
+                else:
+                    #print "Reject"
+                    aglib.connect_c(jt, S, X, Y, CX_conn, CY_conn)
+                    log_prob_traj[i] = log_prob_traj[i-1]
+                    graphs[i] = graphs[i-1]
+                    continue
+
+            elif disconnect[0] == "d":
+                (case, log_q12, X, Y, S, CX_conn, CY_conn) = disconnect
+                log_q21 = aglib.connect_logprob(num_seps - 1, X, Y, CX_conn, CY_conn)
+                alpha = min(np.exp(log_p2 + log_q21 - log_p1 - log_q12), 1)
+                samp = np.random.choice(2, 1, p=[(1 - alpha), alpha])
+                if samp == 1:
+                    #print "Accept"
+                    accept_traj[i] = 1
+                    log_prob_traj[i] = log_p2 + np.log(num_partitions)
+                    graphs[i] = jtlib.graph(jt) # TODO: Improve.
+                else:
+                    #print "Reject"
+                    aglib.connect_d(jt, S, X, Y, CX_conn, CY_conn)
+                
+                    log_prob_traj[i] = log_prob_traj[i-1]
+                    graphs[i] = graphs[i-1]
+                    continue
+        # print("r {}, #moves {}, #r-moves {}, #ratio {:2f}".format(r,
+        #                                                        num_partitions,
+        #                                                        num_revers_partitions,
+#                                                               float(num_partitions)/num_revers_partitions))
+        #    print(np.mean(accept_traj[:i]))
+        if r==0:
+            r0[i] = float(num_partitions)/num_revers_partitions
+        if r==1:
+            r1[i] = float(num_partitions)/num_revers_partitions
+            
     gtraj.set_trajectory(graphs)
     gtraj.logl = log_prob_traj
     return gtraj
@@ -226,7 +294,7 @@ def sample_trajectory(n_samples, randomize, sd):
 
 def sample_trajectory_uniform(n_samples, randomize=100, graph_size=5, cache={}, **args):
     sd = seqdist.UniformJTDistribution(graph_size)
-    return sample_trajectory(n_samples=n_samples,
+    return sample_trajectory_single_move(n_samples=n_samples,
                              randomize=randomize,
                              sd=sd)
 
@@ -238,7 +306,7 @@ def sample_trajectory_loglin(dataframe, n_samples, pseudo_obs=1.0, randomize=100
     sd = seqdist.LogLinearJTPosterior()
     sd.init_model(dataframe.get_values(), pseudo_obs, levels, cache_complete_set_prob=cache)
 
-    return sample_trajectory(n_samples, randomize, sd)
+    return sample_trajectory_single_move(n_samples, randomize, sd)
 
 
 def sample_trajectories_loglin_to_file(dataframe, n_samples, randomize=[1000], pseudo_obs=[1.0],
@@ -306,7 +374,7 @@ def trajectory_to_file(n_samples, randomize, seqdist, dir=".", reseed=False):
         np.random.seed()
 
     print(n_samples, str(randomize), str(seqdist))
-    graph_trajectory = sample_trajectory(n_samples, randomize, seqdist)
+    graph_trajectory = sample_trajectory_single_move(n_samples, randomize, seqdist)
     date = datetime.datetime.today().strftime('%Y%m%d%H%m%S')
     if not os.path.exists(dir):
         os.mkdir(dir)
@@ -332,7 +400,7 @@ def trajectory_to_queue(n_samples, randomize, seqdist, queue, reseed=False):
         np.random.seed()
 
     print(n_samples, str(randomize), str(seqdist))
-    graph_trajectory = sample_trajectory(n_samples, randomize, seqdist)
+    graph_trajectory = sample_trajectory_single_move(n_samples, randomize, seqdist)
     queue.put(graph_trajectory)
 
 def sample_trajectory_ggm(dataframe, n_samples, randomize=1000, D=None, delta=1.0, cache={}, **args):
@@ -341,7 +409,7 @@ def sample_trajectory_ggm(dataframe, n_samples, randomize=1000, D=None, delta=1.
         D = np.identity(p)
     sd = seqdist.GGMJTPosterior()
     sd.init_model(np.asmatrix(dataframe), D, delta, cache)
-    return sample_trajectory(n_samples, randomize, sd)
+    return sample_trajectory_single_move(n_samples, randomize, sd, **args)
 
 
 def sample_trajectories_ggm_to_file(dataframe, n_samples, randomize=[1000], D=None, delta=1.0,

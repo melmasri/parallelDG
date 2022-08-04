@@ -14,6 +14,7 @@ class JunctionTree(nx.Graph):
         self.separators = None
         self.num_graph_nodes = None
         self.latent = False
+        self.clique_hard_threshold = None
 
     def log_nu(self, sep):
         if sep not in self.log_nus:
@@ -130,6 +131,18 @@ def is_junction_tree(tree):
                 if not inter <= n:
                     return False
     return True
+
+
+def n_junction_trees_graph(graph):
+    """ Returns the number of junction trees of a decomposable graph
+    Args: 
+      grpah (networkx): a decomposable grpah
+
+        """
+    import parallelDG.graph.decomposable as dlib
+    seps = dlib.separators(graph)
+    jt = dlib.junction_tree(graph)
+    return int(np.exp(log_n_junction_trees(jt, seps)))
 
 
 def n_junction_trees(p):

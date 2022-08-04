@@ -34,7 +34,8 @@ class Trajectory:
         self.init_graph = None
         self.init_jt = None
         self.graph_dist = None
-
+        self.index_type = 'mcmc_index' # possible mcmc_index for the ith MCMC iteration, or mcmc_subindex for parallel iterations
+        self.dummy = None
     def set_sampling_method(self, method):
         self.sampling_method = method
 
@@ -79,29 +80,37 @@ class Trajectory:
 
     def set_init_graph(self, init_graph):
         self.init_graph = init_graph
-        self.init_jt = dlib.junction_tree(init_graph)
 
     def set_init_jt(self, init_jt):
         self.init_jt = init_jt
-        self.init_graph = jtlib.graph(init_jt)
 
-    def jt_to_graph_updates(self):
+    def jt_to_graph_updates(self, index_type='mcmc_index'):
+        index = 0
+        if index_type == 'mcmc_subindex':
+            index = 1
+        print('Setting up graph trajectories by {}'.format(index_type))
         # (iteration, move_type, node, (new_clq, old_clq, anchor_clq))
         g = list()
         # g0 = jtlib.graph(jt.copy())
         # g.append(g0.copy())
         for m in self.jt_updates:
-            if m[1] == 0:  # connect move
-                g += pmlib.jt_to_graph_connect_move(m[3], m[2], m[0])
+            if m[2] == 0:  # connect move
+                g += pmlib.jt_to_graph_connect_move(m[4], m[3], m[index])
             else:               # disconnect
-                g += pmlib.jt_to_graph_disconnect_move(m[3], m[2], m[0])
+                g += pmlib.jt_to_graph_disconnect_move(m[4], m[3], m[index])
         self.set_graph_updates(g)
+        self.index_type = index_type
 
-    def set_graph_trajectories(self):
+    def set_graph_trajectories(self, **kwargs):
         if not self.graph_updates:
-            self.jt_to_graph_updates()
+            self.jt_to_graph_updates(**kwargs)
         g = self.init_graph
-        graph_traj = [None] * self.sampling_method['params']['samples']
+        index_type = kwargs.get('index_type', 'mcmc_index')
+        print(index_type)
+        if index_type == 'mcmc_index':
+            graph_traj = [None] * self.sampling_method['params']['samples']
+        else:
+            graph_traj = [None] * self.n_updates
         graph_traj[0] = g.copy()
         for move in self.graph_updates:
             if move[1] == 0:  # connect
@@ -147,16 +156,14 @@ class Trajectory:
         if logl is not None:
             self.logl.append(logl)
 
-
     def empirical_distribution(self, from_index=0):
-        length = len(self.trajectory) - from_index
-        graph_dist = gdist.GraphDistribution()
         if not self.trajectory:
             self.set_graph_trajectories()
-            
+        length = len(self.trajectory) - from_index
+        graph_dist = gdist.GraphDistribution()
         for g in self.trajectory[from_index:]:
             graph_dist.add_graph(g, 1./length)
-                
+
         return graph_dist
 
     def log_likelihood(self, from_index=0):
