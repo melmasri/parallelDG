@@ -510,14 +510,10 @@ def trajectory_to_file(n_samples,
                                          seqdist_graph,
                                          reset_cache=reset_cache,
                                          **args)
-    output_filename = output_format = None
-    if "output_directory" in args:
-        output_directory = args["output_directory"]
-    if "output_filename" in args:
-        output_filename = args["output_filename"]
-    if "output_format" in args:
-        output_format = args["output_format"]
-
+    output_filename = args.get("output_filename", None)
+    if not output_filename:
+        output_filename = 'graph_traj'
+    output_format = args.get("output_format", None)
     aux.write_traj_to_file(graph_trajectory,
                            dirt=output_directory,
                            output_filename=output_filename,
