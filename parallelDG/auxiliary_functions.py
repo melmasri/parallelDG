@@ -389,8 +389,9 @@ def write_traj_to_file(graph_trajectory,
         filename_sub = dirt + '/sub_'+output_filename
         df = graph_trajectory.graph_diff_trajectory_df()
         _cols_main = ['added', 'index', 'removed', 'score']
-        _cols_sub = ['added_sub', 'removed_sub', 'subindex']
-        df[_cols_main].to_csv(filename, sep=",", index=False)
+        _cols_sub = ['added_sub', 'subindex', 'removed_sub']
+        #import pdb; pdb.set_trace()
+        df[_cols_main].dropna(axis=0).to_csv(filename, sep=",", index=False)
         df[_cols_sub].to_csv(filename_sub, sep=",", index=False)
     else:
         filename = dirt + "/" + str(graph_trajectory) + "_" + date + ".json"

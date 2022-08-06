@@ -512,7 +512,7 @@ def trajectory_to_file(n_samples,
                                          **args)
     output_filename = args.get("output_filename", None)
     if not output_filename:
-        output_filename = 'graph_traj'
+        output_filename = 'graph_traj.csv'
     output_format = args.get("output_format", None)
     aux.write_traj_to_file(graph_trajectory,
                            dirt=output_directory,
