@@ -324,7 +324,8 @@ class Trajectory:
             return pd.concat([final_df.reset_index(drop=True),
                               df_sub_final.drop(
                                   columns='score'
-                              ).reset_index(drop=True)], axis=1,
+                              ).reset_index(drop=True)],
+                             axis=1,
                              sort=False)
         else:
             return final_df
