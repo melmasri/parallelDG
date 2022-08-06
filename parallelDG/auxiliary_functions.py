@@ -386,11 +386,13 @@ def write_traj_to_file(graph_trajectory,
         os.makedirs(dirt)
     if output_format == 'benchpress':
         filename = dirt + "/"+output_filename
-        filename_sub = dirt+"/"+output_filename[:-3]+'_sub.csv'
+        filename_sub = dirt+"/"+output_filename[:-4]+'_subindex.csv'
         df = graph_trajectory.graph_diff_trajectory_df()
         _cols_main = ['added', 'index', 'removed', 'score']
         _cols_sub = ['added_sub', 'subindex', 'removed_sub']
-        df[_cols_main].dropna(axis=0).to_csv(filename, sep=",", index=False)
+        df2 = df[_cols_main].dropna(axis=0)
+        df2['index'] = df2['index'].astype(np.int64)
+        df2.to_csv(filename, sep=",", index=False)
         df[_cols_sub].to_csv(filename_sub, sep=",", index=False)
     else:
         filename = dirt + "/" + str(graph_trajectory) + "_" + date + ".json"
