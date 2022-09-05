@@ -28,7 +28,7 @@ def sample_trajectory_single_move(n_samples,
                                   init_graph=None,
                                   reset_cache=True,
                                   **args):
-    seed = args.get('seed', time.time())
+    seed = args.get('seed', int(time.time()))
     np.random.seed(seed)
     if init_graph:
         graph = init_graph
@@ -226,7 +226,7 @@ def sample_trajectory(n_samples,
                       init_graph=None,
                       reset_cache=True,
                       **args):
-    seed = args.get('seed', time.time())
+    seed = args.get('seed', int(time.time()))
     np.random.seed(seed)
     if init_graph:
         graph = init_graph
@@ -511,8 +511,9 @@ def trajectory_to_file(n_samples,
                                          reset_cache=reset_cache,
                                          **args)
     output_filename = args.get("output_filename", None)
+    seed = args.get('seed', int(time.time()))
     if not output_filename:
-        output_filename = 'graph_traj.csv'
+        output_filename = 'graph_traj_'+str(seed)+'.csv'
     output_format = args.get("output_format", None)
     aux.write_traj_to_file(graph_trajectory,
                            dirt=output_directory,

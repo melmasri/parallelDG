@@ -95,7 +95,7 @@ class Trajectory:
 
     def set_graph_trajectories(self, **kwargs):
         if not self.graph_updates:
-            self.jt_to_graph_updates(**kwargs)
+            self.jt_to_graph_updates()
         g = self.init_graph
         index_type = kwargs.get('index_type', 'mcmc_index')
         print(index_type)
@@ -112,7 +112,8 @@ class Trajectory:
                 g.add_edge(*move[3])
             if move[2] == 1:  # disconnect
                 g.remove_edge(*move[3])
-            graph_traj[move[i]] = g.copy()
+            graph_traj[move[i]-1] = g.copy()
+            
             # Fill forward graph traj
         for idx, val in enumerate(graph_traj):
             if idx == 0:

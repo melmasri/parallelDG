@@ -18,7 +18,7 @@ import parallelDG.graph.parallel_moves as ndlib
 
 def sample_trajectory_single_move(n_samples, randomize, sd, **args):
     graph = nx.Graph()
-    seed = args.get('seed', time.time())
+    seed = args.get('seed', int(time.time()))
     np.random.seed(seed)
     graph.add_nodes_from(range(sd.p))
     jt = dlib.junction_tree(graph)
