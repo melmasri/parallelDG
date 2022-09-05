@@ -27,14 +27,8 @@ It is also possible to pull parallelDG as a docker image by
 $ docker pull hallawalla/parallelDG
 ```
 
-This package currently requires Python 2.7
-### Running the tests
-
-```
-$ make test
-```
 ## Usage
-See the Jupyter notebooks in notebooks/ for many examples.
+See the Jupyter notebooks (and .py's) in examples/.
 
 
 ## Scripts
