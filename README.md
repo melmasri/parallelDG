@@ -24,7 +24,7 @@ $ pip install parallelDG
 
 It is also possible to pull parallelDG as a docker image by
 ```
-$ docker pull hallawalla/parallelDG
+$ docker pull hallawalla/paralleldg
 ```
 
 ## Usage
