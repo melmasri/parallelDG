@@ -1,15 +1,10 @@
 ![GitHub](https://img.shields.io/github/license/melmasri/parallelDG)
-![PyPI](https://img.shields.io/pypi/v/trilearn)
-![Libraries.io dependency status for latest release](https://img.shields.io/librariesio/release/pypi/trilearn)
 
 # Bayesian inference for decomposable graphical models using Parallel Metropolis-Hastings MC
-A library that implements parallel sampling of decomposable (triangulated) graphical models.
+A library that implements parallel sampling of decomposable (chordal) graphical models.
 Currently supported functionalities include:
 
 - Bayesian structure learning for discrete log-linear and Gaussian data.
-- Predictive classification using Bayesian model averaging (BMA).
-
-### Installation
 
 ### Installation
 This package currently requires Python 2.7.
@@ -29,7 +24,7 @@ $ pip install parallelDG
 
 It is also possible to pull parallelDG as a docker image by
 ```
-$ docker pull onceltuca/parallelDG
+$ docker pull hallawalla/parallelDG
 ```
 
 This package currently requires Python 2.7
@@ -39,7 +34,7 @@ This package currently requires Python 2.7
 $ make test
 ```
 ## Usage
-See the Jupyter notebooks for examples of usage.
+See the Jupyter notebooks in notebooks/ for many examples.
 
 
 ## Scripts
