@@ -12,9 +12,9 @@ If graphviz is not installed, you can install it from brew / aptitude / pacman f
 ```
 $ brew install graphviz
 ```
-On Ubuntu you might need to run
+On Linux system (i.e. Ubuntu/Debian) you might need to run
 ```
-sudo apt-get install python-dev graphviz libgraphviz-dev pkg-config
+$ apt install python-dev graphviz libgraphviz-dev pkg-config
 ```
 
 Then run
