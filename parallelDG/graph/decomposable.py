@@ -150,24 +150,6 @@ def junction_tree(graph):
     return jt
 
 
-def clique_graph(graph):
-    """ Returns the clique-graph representation of decomposable graph.
-
-    Args:
-        graph (NetworkX graph): A decomposable graph
-
-    Returns:
-        NetworkX graph: A CliqueGraph object
-    """
-    jt = junction_tree(graph)
-    cg = clib.CliqueGraph()
-    cg.add_nodes_from(jt.nodes())
-    for n1 in jt.nodes():
-        for n2 in jt.nodes():
-            if n1 & n2 and n1 != n2:
-                cg.add_edge(n1, n2)
-    return cg
-
 
 def gen_AR2_graph(n_dim):
     graph = nx.Graph()
