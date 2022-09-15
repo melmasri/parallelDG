@@ -147,3 +147,11 @@ def separators(graph, clique):
         sep.add(nei & clique)
 
     return sep
+
+
+def leaf_nodes(graph):
+    """ Returns a set of the leaf nodes of graph
+    Args:
+      graph (NetworkX graph): a clique-separator graph
+    """
+    return [x for x in graph.nodes() if graph.in_degree(x) == 1]

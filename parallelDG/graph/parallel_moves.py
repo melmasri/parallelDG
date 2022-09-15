@@ -14,6 +14,18 @@ def leaf_nodes(tree):
     return [x for x in tree.nodes() if tree.degree(x) == 1]
 
 
+def subtree_induced_by_subset(tree, s):
+    """ Returns the subtree induced by the set s.
+
+    Args:
+       tree (NetworkX graph): A junction tree.
+       s (set): Subset of the node in the underlying graph of T.
+    """
+    if len(s) == 0:
+        return tree
+    v_prime = {c for c in tree.nodes() if s <= c}
+    return tree.subgraph(v_prime)
+
 
 def boundary_cliques_node(tree, node, return_sep=False):
     """ Return boundary cliques for a specific node
@@ -24,7 +36,7 @@ def boundary_cliques_node(tree, node, return_sep=False):
                   the probability of the inverse move.
     """
     dumble = False
-    T = jtlib.subtree_induced_by_subset(tree, node)
+    T = subtree_induced_by_subset(tree, node)
     if len(T) > 1:             # num of nodes is 1
         boundary_cliques = leaf_nodes(T)
     else:
@@ -50,7 +62,7 @@ def neighboring_cliques_node(tree, node):
       empty_node (bool) if empty cliques should be included
     """
     anchor_clq_pairs = list()          # format ((anchor, clq1), (anchor, clq1), ()..) anchor in T, clq not in T
-    T = jtlib.subtree_induced_by_subset(tree, node)
+    T = subtree_induced_by_subset(tree, node)
     # nei_cliques (connect move)
     for subnode in T:           # subnode is not necessary a boundary clique
         for nei in tree.neighbors(subnode):
@@ -258,7 +270,7 @@ def revert_moves(tree, node, cliques):
                 connect(tree, nd, X)
             else:               # empty node
                 X = node | nd
-                T = jtlib.subtree_induced_by_subset(tree, node)
+                T = subtree_induced_by_subset(tree, node)
                 conn = list(T.nodes() - cliques)[0]
                 connect(tree, nd, X, conn)
 
