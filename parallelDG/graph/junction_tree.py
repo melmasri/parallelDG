@@ -103,9 +103,9 @@ class JunctionTree(nx.Graph):
         options = {
             "font_size": 12,
             "node_color": "white",
-            "edgecolors": "black",
             "linewidths": 1,
             "width": 1,
+            "edgecolors": "tab:gray",
             'node_size': [ (len(node) + 1) * 600 for node in self.nodes()],
         }
         no_frozen_labels = {node:','.join(map(str, sorted(tuple(node)))) for node in self.nodes()}
