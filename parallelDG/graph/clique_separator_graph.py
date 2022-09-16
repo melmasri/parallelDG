@@ -3,7 +3,7 @@ from parallelDG.graph import junction_tree as jtlib
 from networkx.drawing.nx_pydot import graphviz_layout
 import collections
 import numpy as np
-
+ 
 class CliqeSeparator(nx.DiGraph):
 
     def __init__(self, data=None, **attr):
@@ -75,18 +75,28 @@ class CliqeSeparator(nx.DiGraph):
     
     def plot(self, **args):
         #pos = nx.planar_layout(cs)
-        pos = nx.spring_layout(self)
+        #pos = nx.spring_layout(self)
         pos = graphviz_layout(self, prog="dot")
-        no_frozen_labels = {node: tuple(node) for node in self.nodes()}
+        no_frozen_labels = {node:','.join(map(str, sorted(tuple(node)))) for node in self.nodes()}
         cliques = {clique:"tab:blue" for clique in self.get_cliques()}
         separators = {sep:"tab:red" for sep in self.get_separators()}
         cliques.update(separators)
         color_map = [cliques.get(n) for n in self.nodes()]
+        
+        options = {
+            "font_size": 12,
+            "node_color": color_map,
+            "edgecolors": "black",
+            "linewidths": 1,
+            "width": 1,
+            'node_size': [ (len(node) + 1) * 600 for node in self.nodes()],
+            'alpha' : 0.9,
+            "edgecolors": "tab:gray"    
+        }
         nx.draw(self,
                 pos=pos,
-                node_color=color_map,
                 labels = no_frozen_labels,
-                with_labels=True, **args)
+                with_labels=True, **options)
 
 def clique_separator_graph(jt):
     """ Returns the clique-separator graph as in Ibarra (2009)
