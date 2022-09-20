@@ -69,6 +69,25 @@ class ModifiedBornnCaron(SequentialJTDistribution):
         return new - old
 
 
+class JunctionPenalty(SequentialJTDistribution):
+    """  Penalizes the number of cliques of the junction tree
+    """
+    def __init__(self, alpha=0.25):
+        self.alpha = alpha
+    
+    def log_prior_partial(self, clq, sep):
+        return -self.alpha * len(clq)
+        
+    def log_ratio(self,
+                  old_cliques,
+                  old_separators,
+                  new_cliques,
+                  new_separators,
+                  old_JT,
+                  new_JT):
+        return 0.0
+
+
 
 class GraphUniform(SequentialJTDistribution):
     """  Uniform sampling over decomposable graphs, i.e pi(G) ~ 1/|jt(G)|
