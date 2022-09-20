@@ -4,7 +4,7 @@ Functions related to junction trees.
 
 import networkx as nx
 import numpy as np
-
+from networkx.drawing.nx_pydot import graphviz_layout
 
 class JunctionTree(nx.Graph):
 
@@ -95,6 +95,25 @@ class JunctionTree(nx.Graph):
                 for n2 in set(c) - set([n1]):
                     G.add_edge(n1, n2)
         return G
+    def plot(self, **args):
+        #pos = nx.planar_layout(cs)
+        #pos = nx.spring_layout(self)
+        #pos = graphviz_layout(self, prog="twopi")
+        
+        options = {
+            "font_size": 12,
+            "node_color": "white",
+            "linewidths": 1,
+            "width": 1,
+            "edgecolors": "tab:gray",
+            'node_size': [ (len(node) + 1) * 600 for node in self.nodes()],
+        }
+        no_frozen_labels = {node:','.join(map(str, sorted(tuple(node)))) for node in self.nodes()}
+        nx.draw(self,
+                #pos=pos,
+                labels = no_frozen_labels,
+                with_labels=True, **options)
+
 
 
 
