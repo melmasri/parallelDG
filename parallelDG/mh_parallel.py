@@ -416,6 +416,12 @@ def get_prior(graph_prior):
         else:
             alpha = 0.001
         sd = seqdist.EdgePenalty(alpha)
+    if graph_prior[0] == "junctionpenalty":
+        if len(graph_prior) > 1:
+            alpha = float(graph_prior[1])
+        else:
+            alpha = 0.25
+        sd = seqdist.JunctionPenalty(alpha)
     if graph_prior[0] == "uniform":
         sd = seqdist.GraphUniform()
     # default prior
