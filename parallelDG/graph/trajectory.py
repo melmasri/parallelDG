@@ -234,7 +234,7 @@ class Trajectory:
         df10 = pd.DataFrame({"index": [0],
                             "added": [list_to_string([])],
                             "removed": [list_to_string([])],
-                            "score": [0]})
+                             "score": [self.log_likelihood()[0]]})
         df2 = df0.append(df1).append(df10)
 
         if not self.graph_updates:
