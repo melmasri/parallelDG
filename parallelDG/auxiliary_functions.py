@@ -379,6 +379,7 @@ def plot_graph_traj_statistics(graph_traj, write_to_file=False):
 
 def write_traj_to_file(graph_trajectory,
                        dirt,
+                       labels,
                        output_filename=None,
                        output_format=None):
     date = datetime.datetime.today().strftime('%Y%m%d%H%m%S')
@@ -387,7 +388,7 @@ def write_traj_to_file(graph_trajectory,
     if output_format == 'benchpress':
         filename = dirt + "/"+output_filename
         filename_sub = dirt+"/"+output_filename[:-4]+'_subindex.csv'
-        df = graph_trajectory.graph_diff_trajectory_df()
+        df = graph_trajectory.graph_diff_trajectory_df(labels=labels)
         _cols_main = ['added', 'index', 'removed', 'score']
         _cols_sub = ['added_sub', 'subindex', 'removed_sub']
         df2 = df[_cols_main].dropna(axis=0)

@@ -200,13 +200,18 @@ class Trajectory:
             with open(filename, 'w') as outfile:
                 json.dump(self.to_json(optional=optional), outfile, default=default)
 
-    def graph_diff_trajectory_df(self, subindex=True):
+    def graph_diff_trajectory_df(self, subindex=True, labels=None):
+
+        if labels is None:
+            p = self.init_graph.number_of_nodes()
+            labels = np.array(list(range(p)))
+            
 
         def list_to_string(edge_list):
             s = "["
             for i, e in enumerate(edge_list):
                 e = sorted(e)
-                s += str(e[0]) + "-" + str(e[1])
+                s += str(labels[e[0]]) + "-" + str(labels[e[1]])
                 if i != len(edge_list)-1:
                     s += ";"
             return s + "]"
