@@ -12,3 +12,6 @@ testing_stuff.ipynb
 sandbox/
 sims/
 local_tests/
+.RData
+*.RData
+*.Rhistory

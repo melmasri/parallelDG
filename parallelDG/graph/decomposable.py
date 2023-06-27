@@ -5,7 +5,7 @@ import networkx as nx
 import numpy as np
 
 from parallelDG.graph import junction_tree as libj, junction_tree as jtlib
-from parallelDG.graph import clique_graph as clib
+
 
 def separators(graph):
     """ Returns the separators of graph.
@@ -148,25 +148,6 @@ def junction_tree(graph):
     jt.num_graph_nodes = len(graph)
     jt.clique_hard_threshold = len(graph)
     return jt
-
-
-def clique_graph(graph):
-    """ Returns the clique-graph representation of decomposable graph.
-
-    Args:
-        graph (NetworkX graph): A decomposable graph
-
-    Returns:
-        NetworkX graph: A CliqueGraph object
-    """
-    jt = junction_tree(graph)
-    cg = clib.CliqueGraph()
-    cg.add_nodes_from(jt.nodes())
-    for n1 in jt.nodes():
-        for n2 in jt.nodes():
-            if n1 & n2 and n1 != n2:
-                cg.add_edge(n1, n2)
-    return cg
 
 
 def gen_AR2_graph(n_dim):
