@@ -9,7 +9,6 @@ import parallelDG.graph.junction_tree as libj
 import parallelDG.auxiliary_functions as aux
 from parallelDG.distributions import dirichlet
 
-
 def ll_complete_set_ratio(comp, alpha, counts, data, levels, cache):
     """ The ratio of normalizing constants for a posterior Dirichlet
     distribution defined ofer a complete set (clique or separator).
@@ -18,7 +17,7 @@ def ll_complete_set_ratio(comp, alpha, counts, data, levels, cache):
         comp: Clique or separator.
         alpha: Pseudo counts for each cell.
     """
-    # import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
     if comp not in counts:
         counts[comp] = aux.get_marg_counts(data, list(comp))
     if comp not in cache:
@@ -189,16 +188,16 @@ def hyperconsistent_cliques(clique1, clique1_dist, clique2,
 
         # Calculate marginal distribution for the spe setting sepcells in clique1
         # this should then be the same in clique2.
-        sep_marg = np.sum(clique1_dist[indexing_clique1])
+        sep_marg = np.sum(clique1_dist[tuple(indexing_clique1)])
         sep_dist[sepcells] = sep_marg
 
         # Set the shape of clique2 dist
-        shape_clique2_dist = clique2_dist[indexing_clique2].shape
+        shape_clique2_dist = clique2_dist[tuple(indexing_clique2)].shape
         alphas = [constant_alpha / np.prod(shape_clique2_dist)] * np.prod(shape_clique2_dist)
         # alphas = [constant_alpha] * np.prod(shape)  # TODO
         # Generate distribution of clique1 for the sep setting sepcell
         d = np.random.dirichlet(alphas).reshape(shape_clique2_dist)
-        clique2_dist[indexing_clique2] = d * sep_marg
+        clique2_dist[tuple(indexing_clique2)] = d * sep_marg
     return (clique2_dist, sep_dist)
     # return clique2_dist
 
@@ -310,7 +309,7 @@ def sample(table, n=1):
             dist = [None] * table.shape[i]
             for level in range(table.shape[i]):
                 index = x + [level] + [Ellipsis]
-                dist[level] = np.sum(table[index])
+                dist[level] = np.sum(table[tuple(index)])
             dist /= sum(dist)
             val_bin = np.random.multinomial(1, dist)
             val = list(val_bin).index(1)

@@ -20,6 +20,7 @@ import networkx as nx
 import parallelDG.auxiliary_functions as aux
 
 import copy
+
 # starting MCMC sampler
 def sample_trajectory_single_move(n_samples,
                                   randomize,
@@ -31,7 +32,7 @@ def sample_trajectory_single_move(n_samples,
     seed = args.get('seed', int(time.time()))
     np.random.seed(seed)
     if init_graph:
-        graph = init_graph
+        graph = init_graph.copy()
         jt = dlib.junction_tree(graph)
     else:
         graph = nx.Graph()
@@ -41,19 +42,14 @@ def sample_trajectory_single_move(n_samples,
         jt.add_nodes_from(dummy_tree.nodes())
         jt.add_edges_from(dummy_tree.edges())
         jt.num_graph_nodes = sd.p
+    sd.cache = {}
 
-    jt.clique_hard_threshold = args.get('jt.clique_hard_threshold', sd.p)
-    if reset_cache is True:
-        sd.cache = {}
-
-    jt.latent = True
-    jt_traj = [None] * n_samples
-    jt_traj[0] = jt.copy()
+    t = jtlib.JunctionMap(jt)
     log_prob_traj = [0] * n_samples
-
+    p = t.p
     gtraj = mcmctraj.Trajectory()
-    gtraj.trajectory_type = "junction_tree"
-    gtraj.set_sampling_method({"method": "mh",
+    gtraj.trajectory_type = "Latent Juction tree"
+    gtraj.set_sampling_method({"method": "Metropolis-Hastings - single move sampler",
                                "params": {"samples": n_samples,
                                           "randomize_interval": randomize}
                                })
@@ -61,175 +57,102 @@ def sample_trajectory_single_move(n_samples,
     gtraj.set_graph_prior(sd_graph)
     gtraj.set_init_graph(graph) 
     gtraj.set_init_jt(jt)
-
-    log_prob_traj[0] = sd.log_likelihood(jt_traj[0])
+    log_prob_traj[0] = sd.log_likelihood_partial(t.get_cliques(), t.get_separators())
     update_moves = list()
     num_nodes = len(graph)
     k = int(0)
     tic = time.time()
-    def _continue(i):
-        log_prob_traj[i] = log_prob_traj[i-1]
-
-    def copy_jt(jt):
-        jt1 = jt.copy()
-        jt1.latent = jt.latent
-        jt1.num_graph_nodes = jt.num_graph_nodes
-        jt1.clique_hard_threshold = jt.clique_hard_threshold
-        return jt1
-
-    # Sampling moves and nodes
     acc_ratios = []
     for i in tqdm(range(1, n_samples), desc="Metropolis-Hastings samples"):
         if i % randomize == 0:
-            jtlib.randomize(jt)
-        # selecting moves and nodes
-        node = frozenset([np.random.randint(num_nodes)])
+            t.randomize()
+        node = np.random.randint(p)
         move_type = np.random.randint(2)
         log_p = 0.0
-        if move_type == 0:          # connect
-            partitions, num_partitions = ndlib.paritioned_connect_moves(jt, node)
-            np.random.shuffle(partitions)             #  shuffling the output
-            if not partitions:
-                _continue(i)
+        ratios= 0.0
+        subtree = ndlib.subtree_induced_by_set(t.t, t.node2t[node])
+        if move_type == 0:
+            moves, num_moves = ndlib.propose_connect_moves(t.t, subtree)
+            np.random.shuffle(moves)
+            if not moves:
+                log_prob_traj[i] = log_prob_traj[i-1]
                 continue
-            cl_anchor, cl_current = partitions[0]
-            cl_prop = cl_current | node
-            if cl_prop in jt:
-                _continue(i)
-                continue
-            sp_prop = cl_anchor & cl_prop
-            sp = cl_anchor & cl_current
-            # New clique log-lik + prior
-            log_p2 = sd.log_likelihood_partial(
-                cliques=[cl_prop],
-                separators={sp_prop: set([(cl_anchor, cl_prop)])})
-            log_p1 = sd.log_likelihood_partial(
-                [cl_current], {sp: set([(cl_anchor, cl_current)])})
-            log_g2 = sd_graph.log_prior_partial(cl_prop, sp_prop)
-            # old clique log-like + prior
-            log_g1 = sd_graph.log_prior_partial(cl_current, sp)
-            prev_jt = copy_jt(jt)
-            ndlib.connect(jt, cl_current, cl_prop, cl_anchor)
-            _, num_revers_partitions = ndlib.paritioned_disconnect_moves(jt, node) 
-            log_q2 = -np.log(num_partitions)
-            log_q1 = -np.log(num_revers_partitions)
-            # update probability
-            acc_ratios.append((log_p2 - log_p1, log_g2 - log_g1, log_q2 - log_q1))
-            alpha = min(1,
-                        np.exp(log_p2 + log_g2 + log_q2 - log_p1 - log_g1 - log_q1))
+            reverse_moves, num_reverse_moves = ndlib.propose_disconnect_moves(t.t, subtree, True)
+            num_reverse_moves = ndlib.reverse_move_leafs_count(reverse_moves, moves[0][1])
+            num_reverse_moves += 1 * (subtree.order() == 1)
+            U, Uadj = moves[0]
+            C, Cadj = t.t2clique[U], t.t2clique[Uadj]
+            Cadj = frozenset(Cadj)
+            Cnew = frozenset(C | {node})
+            C = frozenset(C)
+            S =  frozenset(C & Cadj)
+            Snew = frozenset(Cnew & Cadj)
+            log_p2 = sd.log_likelihood_partial([Cnew],{Snew: [(Cadj, Cnew)]})
+            log_p1 = sd.log_likelihood_partial([C], {S: [(Cadj, C)]})
+            log_g2 = sd_graph.log_prior_partial(Cnew, Snew)
+            log_g1 = sd_graph.log_prior_partial(C, S)
+            log_q2 = -np.log(num_moves)
+            log_q1 = -np.log(num_reverse_moves)
+            ratios = (log_p2 - log_p1, log_g2 - log_g1, log_q2 - log_q1)
+            acc_ratios.append(ratios)
+            alpha = min(1, np.exp(np.sum(ratios)))
             k += int(1)
             if np.random.uniform() <= alpha:
-                # ndlib.connect(jt, cl_current, cl_prop, cl_anchor)
                 log_p += (log_p2 - log_p1) + (log_g2 - log_g1)
-                update_moves.append((i, k, move_type, node, (cl_prop,
-                                                             cl_current,
-                                                             cl_anchor)))
-            else:
-                #ndlib.disconnect(jt, cl_prop, cl_current)
-                jt = prev_jt
-
-        else:                       # diconnect
-            partitions, num_partitions = ndlib.paritioned_disconnect_moves(jt, node)
-            np.random.shuffle(partitions)             #  shuffling the output
-            if not partitions:
-                _continue(i)
+                update_moves.append((i, k, move_type, {node}, (Cnew, C, Cadj)))
+                t.connect(U, node)
+        else:
+            moves, num_moves = ndlib.propose_disconnect_moves(t.t, subtree)
+            np.random.shuffle(moves)
+            if not moves:
+                log_prob_traj[i] = log_prob_traj[i-1]
                 continue
-            cl_anchor, cl_current = partitions[0]
-            if cl_anchor:
-                sp = cl_current & cl_anchor
-                cl_prop = cl_current - node
-                if cl_prop in jt:
-                    _continue(i)
-                    continue
-                sp_prop = cl_prop & cl_anchor
-                # New clique log-lik + prior
-                log_p2 = sd.log_likelihood_partial(
-                    [cl_prop],
-                    {sp_prop: set([(cl_anchor, cl_prop)])})
-                log_p1 = sd.log_likelihood_partial([cl_current],
-                                                   {sp: set([(cl_anchor, cl_current)])})
-                log_g1 = sd_graph.log_prior_partial(cl_current, sp)
-                log_g2 = sd_graph.log_prior_partial(cl_prop, sp_prop)
-                # old clique + prior
-                prev_jt = copy_jt(jt)
-                ndlib.disconnect(jt, cl_current, cl_prop)
-                _, num_revers_partitions = ndlib.paritioned_connect_moves(jt, node)
-                log_q2 = -np.log(num_partitions)
-                log_q1 = -np.log(num_revers_partitions)
-                acc_ratios.append((log_p2 - log_p1, log_g2 - log_g1, log_q2 - log_q1))
-                alpha = min(1,
-                            np.exp(log_p2 + log_g2 + log_q2 - log_p1 - log_g1 - log_q1))
-                k += int(1)
-                if np.random.uniform() <= alpha:
-                    #ndlib.disconnect(jt, cl_current, cl_prop)
-                    log_p += (log_p2 - log_p1) + (log_g2 - log_g1)
-                    update_moves.append((i, k, move_type, node, (cl_prop,
-                                                                 cl_current,
-                                                                 cl_anchor)))
-                else:
-                    jt = prev_jt
-                    # if cl_prop:
-                    #     ndlib.connect(jt, cl_prop, cl_current, cl_anchor)
-                    # else:
-                    #    ndlib.connect(jt, frozenset([]), cl_current, cl_anchor)
-            else:                   # disconnect to an empty clique
-                sp = sp_prop = sp_single = cl_anchor
-                cl_prop = cl_current - node
-                cl_single = node
-                if cl_prop in jt or cl_single in jt:
-                    _continue(i)
-                    continue
-                # New clique log-lik + prior
-                log_p2 = sd.log_likelihood_partial(
-                    [cl_prop],
-                    {sp_prop: set([(cl_anchor, cl_prop)])})
-                log_p2 += sd.log_likelihood_partial(
-                    [cl_single],     
-                    {sp_single: set([(cl_anchor, cl_single)])})    
-                log_p1 = sd.log_likelihood_partial([cl_current],
-                                                   {sp: set([(cl_anchor, cl_current)])})
-                log_g1 = sd_graph.log_prior_partial(cl_current, sp)
-                log_g2 = sd_graph.log_prior_partial(cl_prop, sp_prop)
-                log_g2 += sd_graph.log_prior_partial(cl_single, sp_single)
-                acc_ratios.append((log_p2 - log_p1, log_g2 - log_g1, 0.0))
-                alpha = min(1, np.exp(log_p2 + log_g2 - log_p1 - log_g1))
-                k += int(1)
-                if np.random.uniform() <= alpha:
-                    ndlib.disconnect(jt, cl_current, cl_prop)
-                    ndlib.connect(jt, cl_anchor, cl_single, cl_prop)
-                    log_p += (log_p2 - log_p1) + (log_g2 - log_g1)
-                    update_moves.append((i, k,
-                                         move_type, node,
-                                         (cl_prop,
-                                          cl_current,
-                                          cl_anchor)))
-
+            reverse_moves, num_reverse_moves = ndlib.propose_connect_moves(t.t, subtree)
+            num_reverse_moves = ndlib.reverse_neighbors_count(t.t, moves[0][0], num_reverse_moves)
+            U, Uadj = moves[0]
+            C, Cadj = t.t2clique[U], t.t2clique[Uadj]
+            Cadj = frozenset(Cadj)
+            Cnew = frozenset(C - {node})
+            C = frozenset(C)
+            S =  frozenset(C & Cadj)
+            Snew = frozenset(Cnew & Cadj)
+            log_p2 = sd.log_likelihood_partial([Cnew],{Snew: [(Cadj, Cnew)]})
+            log_p1 = sd.log_likelihood_partial([C], {S: [(Cadj, C)]})
+            log_g2 = sd_graph.log_prior_partial(Cnew, Snew)
+            log_g1 = sd_graph.log_prior_partial(C, S)
+            log_q2 = -np.log(num_moves)
+            log_q1 = -np.log(num_reverse_moves)
+            ratios = (log_p2 - log_p1, log_g2 - log_g1, log_q2 - log_q1)
+            acc_ratios.append(ratios)
+            alpha = min(1, np.exp(np.sum(ratios)))
+            k += int(1)
+            if np.random.uniform() <= alpha:
+                log_p += (log_p2 - log_p1) + (log_g2 - log_g1)
+                update_moves.append((i, k, move_type, {node}, (Cnew, C, Cadj)))
+                t.disconnect(U, node)
         log_prob_traj[i] = log_prob_traj[i-1] + log_p
-        # jt_traj[i] = jt.copy()
+       
     toc = time.time()
     gtraj.set_logl(log_prob_traj)
     gtraj.set_nupdates(k)
     gtraj.set_time(toc-tic)
     gtraj.set_jt_updates(update_moves)
-    # gtraj.jt_trajectory = jt_traj
-    # gtraj.trajectory = graphs
     gtraj.dummy = acc_ratios
+    gtraj.t = t
     print('Total of {} updates, for an average of {:.2f} per iteration or {:.2f}updates/sec'.format(k, float(k)/n_samples,k/(toc-tic)))
     print('Acceptance rate {:.4f}'.format(float(len(update_moves))/k))
     return gtraj
-
-
+                
 def sample_trajectory(n_samples,
                       randomize,
                       sd,
                       sd_graph,
                       init_graph=None,
-                      reset_cache=True,
                       **args):
     seed = args.get('seed', int(time.time()))
     np.random.seed(seed)
     if init_graph:
-        graph = init_graph
+        graph = init_graph.copy()
         jt = dlib.junction_tree(graph)
     else:
         graph = nx.Graph()
@@ -240,19 +163,13 @@ def sample_trajectory(n_samples,
         jt.add_edges_from(dummy_tree.edges())
         jt.num_graph_nodes = sd.p
 
-
-    jt.clique_hard_threshold = args.get('jt.clique_hard_threshold', sd.p)
-    if reset_cache is True:
-        sd.cache = {}
-
-    jt.latent = True
-    jt_traj = [None] * n_samples
-    jt_traj[0] = jt.copy()
-    log_prob_traj = [None] * n_samples
-
+    sd.cache = {}
+    t = jtlib.JunctionMap(jt)
+    log_prob_traj = [0] * n_samples
+    p = t.p
     gtraj = mcmctraj.Trajectory()
-    gtraj.trajectory_type = "junction_tree"
-    gtraj.set_sampling_method({"method": "mh",
+    gtraj.trajectory_type = "Latent Juction tree"
+    gtraj.set_sampling_method({"method": "Metropolis-Hastings - parallel sampler",
                                "params": {"samples": n_samples,
                                           "randomize_interval": randomize}
                                })
@@ -260,174 +177,100 @@ def sample_trajectory(n_samples,
     gtraj.set_graph_prior(sd_graph)
     gtraj.set_init_graph(graph) 
     gtraj.set_init_jt(jt)
-
-    log_prob_traj[0] = sd.log_likelihood(jt_traj[0])
+    
+    log_prob_traj[0] = sd.log_likelihood_partial(t.get_cliques(), t.get_separators())
     update_moves = list()
-    num_nodes = len(graph)
+    num_nodes = sd.p
     k = int(0)
-    acc_ratios = []
     tic = time.time()
-    def _continue(i):
-        log_prob_traj[i] = log_prob_traj[i-1]
-    for i in tqdm(range(1, n_samples), desc="Parallel Metropolis-Hastings samples"):
+    acc_ratios = []
+    for i in tqdm(range(1, n_samples), desc="Metropolis-Hastings samples"):
         if i % randomize == 0:
-            jtlib.randomize(jt)
-
-        node = frozenset([np.random.randint(num_nodes)])
+            t.randomize()
+        node = np.random.randint(p)
         move_type = np.random.randint(2)
         log_p = 0.0
-        if move_type == 0:          # connect
-            partitions, num_partitions = ndlib.paritioned_connect_moves(jt, node)
-            np.random.shuffle(partitions)             #  shuffling the output
-            if not partitions:
-                _continue(i)
+        ratios= 0.0
+        subtree = ndlib.subtree_induced_by_set(t.t, t.node2t[node])
+        if move_type == 0:
+            moves, num_moves = ndlib.propose_connect_moves(t.t, subtree)
+            if not moves:
+                log_prob_traj[i] = log_prob_traj[i-1]
                 continue
-            for cl_anchor, cl_current in partitions:
-                cl_prop = cl_current | node
-                if cl_prop in jt:
-                    continue
-                sp_prop = cl_anchor & cl_prop
-                sp = cl_anchor & cl_current
-                # New clique log-lik + prior
-                log_p2 = sd.log_likelihood_partial(
-                    cliques=[cl_prop],
-                    separators={sp_prop: set([(cl_anchor, cl_prop)])})
-                log_g2 = sd_graph.log_prior_partial(cl_prop, sp_prop)
-                # old clique log-like + prior
-                log_p1 = sd.log_likelihood_partial(
-                    [cl_current], {sp: set([(cl_anchor, cl_current)])})
-                log_g1 = sd_graph.log_prior_partial(cl_current, sp)
-                acc_ratios.append((i, log_p2 - log_p1, log_g2 - log_g1, 0))
-                alpha = min(1, np.exp(log_p2 + log_g2 - log_p1 - log_g1))
+            for U, Uadj in moves:
+                C, Cadj = t.t2clique[U], t.t2clique[Uadj]
+                Cadj = frozenset(Cadj)
+                Cnew = frozenset(C | {node})
+                C = frozenset(C)
+                S =  frozenset(C & Cadj)
+                Snew = frozenset(Cnew & Cadj)
+                log_p2 = sd.log_likelihood_partial([Cnew],{Snew: [(Cadj, Cnew)]})
+                log_p1 = sd.log_likelihood_partial([C], {S: [(Cadj, C)]})
+                log_g2 = sd_graph.log_prior_partial(Cnew, Snew)
+                log_g1 = sd_graph.log_prior_partial(C, S)
+                ratios = (log_p2 - log_p1, log_g2 - log_g1, 0)
+                acc_ratios.append((i,) + ratios)
+                alpha = min(1, np.exp(np.sum(ratios)))
                 k += int(1)
                 if np.random.uniform() <= alpha:
-                    ndlib.connect(jt, cl_current, cl_prop, cl_anchor)
-                    # graphs.append(jtlib.graph(jt))
                     log_p += (log_p2 - log_p1) + (log_g2 - log_g1)
-                    update_moves.append((i, k,
-                                         move_type,
-                                         node,
-                                         (cl_prop,
-                                          cl_current,
-                                          cl_anchor)))
-        else:                       # diconnect
-            partitions, num_partitions = ndlib.paritioned_disconnect_moves(jt, node)
-            np.random.shuffle(partitions)
-            if not partitions:
-                _continue(i)
+                    update_moves.append((i, k, move_type, {node}, (Cnew, C, Cadj)))
+                    t.connect(U, node)
+        else:
+            moves, num_moves = ndlib.propose_disconnect_moves(t.t, subtree)
+            if not moves:
+                log_prob_traj[i] = log_prob_traj[i-1]
                 continue
-            for cl_anchor, cl_current in partitions:
-                if cl_anchor: 
-                    sp = cl_current & cl_anchor
-                    cl_prop = cl_current - node
-                    if cl_prop in jt:
-                        continue
-                    sp_prop = cl_prop & cl_anchor
-                    # New clique log-lik + prior
-                    log_p2 = sd.log_likelihood_partial(
-                        [cl_prop],
-                        {sp_prop: set([(cl_anchor, cl_prop)])})
-                    log_g2 = sd_graph.log_prior_partial(cl_prop, sp_prop)
-                    # old clique + prior
-                    log_p1 = sd.log_likelihood_partial([cl_current],
-                                                       {sp: set([(cl_anchor, cl_current)])})
-                    log_g1 = sd_graph.log_prior_partial(cl_current, sp)
-                    acc_ratios.append((i, log_p2 - log_p1, log_g2 - log_g1, 0))
-                    alpha = min(1, np.exp(log_p2 + log_g2 - log_p1 - log_g1))
-                    k += int(1)
-                    if np.random.uniform() <= alpha:
-                        ndlib.disconnect(jt, cl_current, cl_prop)
-                        #   graphs.append(jtlib.graph(jt))
-                        log_p += (log_p2 - log_p1) + (log_g2 - log_g1)
-                        update_moves.append((i, k,
-                                             move_type,
-                                             node,
-                                             (cl_prop,
-                                              cl_current,
-                                              cl_anchor)))
-                else:           # disconnect to an empty clique
-                    sp = sp_prop = sp_single = cl_anchor
-                    cl_prop = cl_current - node
-                    cl_single = node
-                    if cl_prop in jt or cl_single in jt:
-                        continue
-                    # New clique log-lik + prior
-                    log_p2 = sd.log_likelihood_partial(
-                        [cl_prop],
-                        {sp_prop: set([(cl_anchor, cl_prop)])})
-                    log_p2 += sd.log_likelihood_partial(
-                        [cl_single],     
-                        {sp_single: set([(cl_anchor, cl_single)])})    
-                    
-                    log_g2 = sd_graph.log_prior_partial(cl_prop, sp_prop)
-                    log_g2 += sd_graph.log_prior_partial(cl_single, sp_single)
-                    # old clique + prior
-                    log_p1 = sd.log_likelihood_partial([cl_current],
-                                                       {sp: set([(cl_anchor, cl_current)])})
-                    log_g1 = sd_graph.log_prior_partial(cl_current, sp)
-                    acc_ratios.append((i, log_p2 - log_p1, log_g2 - log_g1, 0))
-                    alpha = min(1, np.exp(log_p2 + log_g2 - log_p1 - log_g1))
-                    k += int(1)
-                    if np.random.uniform() <= alpha:
-                        ndlib.disconnect(jt, cl_current, cl_prop)
-                        ndlib.connect(jt, cl_anchor, cl_single, cl_prop)
-                        # graphs.append(jtlib.graph(jt))
-                        log_p += (log_p2 - log_p1) + (log_g2 - log_g1)
-                        update_moves.append((i, k,
-                                             move_type, node,
-                                             (cl_prop,
-                                              cl_current,
-                                              cl_anchor)))
-        # print("move type {}, q(t,t') {}, q(t', t) {}, alpha {}".format(move_type,
-        #                                                                n_moves,
-        #                                                                revers_n_moves,
-        #                                                                alpha
-        # ))
-        #import pdb;pdb.set_trace()
+            for U, Uadj in moves: 
+                C, Cadj = t.t2clique[U], t.t2clique[Uadj]
+                Cadj = frozenset(Cadj)
+                Cnew = frozenset(C - {node})
+                C = frozenset(C)
+                S =  frozenset(C & Cadj)
+                Snew = frozenset(Cnew & Cadj)
+                log_p2 = sd.log_likelihood_partial([Cnew],{Snew: [(Cadj, Cnew)]})
+                log_p1 = sd.log_likelihood_partial([C], {S: [(Cadj, C)]})
+                log_g2 = sd_graph.log_prior_partial(Cnew, Snew)
+                log_g1 = sd_graph.log_prior_partial(C, S)
+                ratios = (log_p2 - log_p1, log_g2 - log_g1, 0)
+                acc_ratios.append((i, ) + ratios)
+                alpha = min(1, np.exp(np.sum(ratios)))
+                k += int(1)
+                if np.random.uniform() <= alpha:    
+                    log_p += (log_p2 - log_p1) + (log_g2 - log_g1)
+                    update_moves.append((i, k, move_type, {node}, (Cnew, C, Cadj)))
+                    t.disconnect(U, node)
         log_prob_traj[i] = log_prob_traj[i-1] + log_p
-        # jt_traj[i] = jt.copy()
-
+       
     toc = time.time()
     gtraj.set_logl(log_prob_traj)
     gtraj.set_nupdates(k)
     gtraj.set_time(toc-tic)
     gtraj.set_jt_updates(update_moves)
-    # gtraj.jt_trajectory = jt_traj
-    # gtraj.trajectory = graphs
     gtraj.dummy = acc_ratios
+    gtraj.t = t
     print('Total of {} updates, for an average of {:.2f} per iteration or {:.2f}updates/sec'.format(k, float(k)/n_samples,k/(toc-tic)))
-    print('Acceptance rate {:.4f}'.format(len(update_moves)/float(k)))
+    print('Acceptance rate {:.4f}'.format(float(len(update_moves))/k))
     return gtraj
 
-
 def get_prior(graph_prior):
-    sd = None
-    if graph_prior[0] == "mbc":
-        if len(graph_prior) > 1:
-            alpha = float(graph_prior[1])
-            beta = float(graph_prior[2])
-        else:
-            alpha = 2.0
-            beta = 4.0
-        sd = seqdist.ModifiedBornnCaron(alpha, beta)
-    if graph_prior[0] == "edgepenalty":
-        if len(graph_prior) > 1:
-            alpha = float(graph_prior[1])
-        else:
-            alpha = 0.001
-        sd = seqdist.EdgePenalty(alpha)
-    if graph_prior[0] == "junctionpenalty":
-        if len(graph_prior) > 1:
-            alpha = float(graph_prior[1])
-        else:
-            alpha = 0.25
-        sd = seqdist.JunctionPenalty(alpha)
-    if graph_prior[0] == "uniform":
-        sd = seqdist.GraphUniform()
-    # default prior
-    if not sd:
-        sd = get_prior(["mbc", 2.0, 4.0])
-    return sd
+    graph_prior_type = graph_prior[0].lower()
+    default_parameters = {
+        "mbc": (seqdist.ModifiedBornnCaron, [2.0, 4.0]),
+        "edgepenalty": (seqdist.EdgePenalty, [0.001]),
+        "junctionpenalty": (seqdist.JunctionPenalty, [0.25]),
+        "uniform": (seqdist.GraphUniform, [])
+    }
+
+    if graph_prior_type not in default_parameters:
+        graph_prior_type = "mbc"
+
+    sd_class, default_vals = default_parameters[graph_prior_type]
+
+    # If more parameters are provided in graph_prior, use them instead of defaults
+    parameters = graph_prior[1:] if len(graph_prior) > 1 else default_vals
+
+    return sd_class(*map(float, parameters))
 
 
 def sample_trajectory_uniform(
@@ -634,14 +477,22 @@ def sample_trajectory_loglin(dataframe,
     levels = np.array([range(l) for l in n_levels])
 
     sd = seqdist.LogLinearJTPosterior()
-    sd.init_model(dataframe.to_numpy(), pseudo_obs, levels, {})
+    sd.init_model(dataframe.to_numpy(), pseudo_obs, levels, {}, {})
     sd_graph = get_prior(graph_prior)
-    return sample_trajectory(n_samples,
-                             randomize,
-                             sd,
-                             sd_graph,
-                             reset_cache=reset_cache,
-                             **args)
+    if 'single_move' in args:
+        return sample_trajectory_single_move(n_samples,
+                                             randomize,
+                                             sd,
+                                             sd_graph,
+                                             reset_cache=reset_cache,
+                                             **args)
+    else:
+        return sample_trajectory(n_samples,
+                                 randomize,
+                                 sd,
+                                 sd_graph,
+                                 reset_cache=reset_cache,
+                                 **args)
 
 
 def sample_trajectories_loglin_to_file(dataframe,
@@ -666,7 +517,7 @@ def sample_trajectories_loglin_to_file(dataframe,
             for r in randomize:
                 for p in pseudo_obs:
                     sd = seqdist.LogLinearJTPosterior()
-                    sd.init_model(dt, p, levels, {})   
+                    sd.init_model(dt, p, levels, {}, {})   
                     graph_trajectory = trajectory_to_file(n_samples=T,
                                                           randomize=r,
                                                           seqdist=sd,
@@ -700,7 +551,7 @@ def sample_trajectories_loglin_parallel(dataframe,
             for r in randomize:
                 for p in pseudo_obs:
                     sd = seqdist.LogLinearJTPosterior()
-                    sd.init_model(dt, p, levels, {})
+                    sd.init_model(dt, p, levels, {}, {})
                     print("Starting: " + str((T, r, p, str(sd),
                                               reset_cache, True)))
                     proc = Process(target=trajectory_to_queue,
@@ -778,5 +629,29 @@ def ggm_loglikelihood(dataframe,
     seps = jtlib.separators(jt)
     clqs = jt.nodes()
     logl = sd.log_likelihood(jt)
+    logl += sd_graph.log_prior(clqs, seps)
+    return logl
+
+
+def loglinear_loglekihood(dataframe,
+                          graph,
+                          pseudo_obs=[1.0, ],
+                          graph_prior=['mbc', 2.0, 4.0],
+                          **args):
+    p = dataframe.shape[1]
+    n_levels = np.array(dataframe.columns.get_level_values(1), dtype=int)
+    levels = np.array([range(l) for l in n_levels])
+    dt = dataframe.to_numpy()
+
+    sd = seqdist.LogLinearJTPosterior()
+    sd.init_model(dataframe.to_numpy(),
+                  pseudo_obs,
+                  levels, {}, {})
+    sd_graph = get_prior(graph_prior)
+    
+    jtr = dlib.junction_tree(graph)
+    seps = jtlib.separators(jtr)
+    clqs = jtr.nodes()
+    logl = sd.log_likelihood(jtr)
     logl += sd_graph.log_prior(clqs, seps)
     return logl

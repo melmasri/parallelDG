@@ -4,7 +4,182 @@ Functions related to junction trees.
 
 import networkx as nx
 import numpy as np
+import itertools
 
+class JunctionMap:
+    def __init__(self, junction_tree):
+        self.graph_nodes = set().union(*junction_tree.nodes())
+        self.p = len(self.graph_nodes)
+        self.t, self.t2clique = self.create_t_and_t2clique(junction_tree)
+        self.node2t = self.create_node2t()
+
+
+    def create_t_and_t2clique(self, jt):
+        """
+        This function transforms a junction tree into a new graph where the original cliques are mapped to integer identifiers.
+        Singleton nodes in the original tree, if any, are connected to randomly chosen nodes in the new graph.
+
+        Args:
+            jt (networkx.Graph): The input junction tree.
+
+        Returns:
+            t (networkx.Graph): The new graph, based on integer identifiers.
+            t2clique (dict): A dictionary mapping from new integer identifiers to original cliques.
+        """
+        # Extract graph nodes
+
+        # Create mappings for junction tree cliques and corresponding integer identifiers
+        t2clique = {k: set(C) for k, C in enumerate(jt.nodes())}  # Convert each frozenset to a set
+        clique2t = {frozenset(v): k for k, v in t2clique.items()}  # Use frozenset for dictionary keys
+
+        # Initialize new graph
+        t = nx.Graph()
+        t.add_nodes_from(range(self.p))
+
+        # Add edges based on junction tree structure
+        edges_to_add = [(clique2t[edge[0]], clique2t[edge[1]]) for edge in jt.edges()]
+        t.add_edges_from(edges_to_add)
+
+        # Identify singleton nodes
+        singletons = [node for node in t.nodes() if t.degree(node) == 0]
+
+        # If there are any singleton nodes, randomly connect them to existing nodes
+        if singletons:
+            non_empty_nodes = max(t2clique.keys())
+            for node in singletons:
+                target_node = np.random.randint(non_empty_nodes)
+                t.add_edge(node, target_node)
+                # Add singleton nodes to the t2clique dictionary with empty clique
+                t2clique[node] = set()
+
+        return t, t2clique
+
+
+    def create_node2t(self):
+        """
+        This function creates a mapping from each node in the original graph to the corresponding nodes in the new graph that include it in their cliques, based on the t2clique mapping.
+        """
+        node2t = {}
+        for t_node, clique in self.t2clique.items():
+            for node in clique:
+                node2t.setdefault(node, set()).add(t_node)
+        return node2t
+
+    def connect(self, t_node, g_node):
+        """Add a connection between a graph node and a tree node in the mapping dictionaries.
+    
+        Args:
+            t_node: The tree node identifier.
+            g_node: The graph node identifier.
+        """
+        self.node2t[g_node].add(t_node)
+        self.t2clique[t_node].add(g_node)
+
+
+    def disconnect(self, t_node, g_node):
+        """Remove a connection between a graph node and a tree node in the mapping dictionaries.
+
+        Args:
+            t_node: The tree node identifier.
+            g_node: The graph node identifier.
+        
+        """
+        self.node2t[g_node].remove(t_node)
+        self.t2clique[t_node].remove(g_node)
+
+    def get_cliques(self):
+        """ Returns the set of cliques from the t2clique dictionary.
+
+        Returns:
+            cliques (list): List of cliques, where each clique is represented as a set of nodes.
+        """
+        return [frozenset(clique) for clique in self.t2clique.values() if clique]
+
+    def get_separators(self):
+        """ Returns the dictionary of separators from the tree and its t2clique dictionary.
+
+        Returns:
+            separators (dict): Dict with separators as keys and list of associated edges as values.
+        """
+        separators =dict()  # Using a dict to store separators and their associated edges
+        for edge in self.t.edges():
+            clique_a = self.t2clique.get(edge[0], set())
+            clique_b = self.t2clique.get(edge[1], set())
+            if clique_a and clique_b:  # Ensure both cliques are not empty
+                separator = frozenset(clique_a.intersection(clique_b))
+                if separator in separators:
+                    separators[separator].append((clique_a, clique_b))
+                else:
+                    separators[separator] = [(clique_a, clique_b)]
+        return separators
+
+
+    def to_graph(self):
+        """
+        Returns the graph underlying the integer identifier tree.
+
+        Args:
+            t2clique (dict): A dictionary mapping from new integer identifiers to original cliques.
+
+        Returns:
+            G (networkx.Graph): An undirected graph.
+        """
+        G = nx.Graph()
+        for t_node, clique in self.t2clique.items():
+            if len(clique) == 1:
+                G.add_node(list(clique)[0])  # add singleton nodes
+            else:
+                for node1, node2 in itertools.combinations(clique, 2):
+                    G.add_edge(node1, node2)
+        return G
+
+    def to_junction_tree(self):
+        # Creating a mapping from the original nodes to the new nodes (cliques)
+        jtree = JunctionTree()
+        node_mapping = set([frozenset(clique) for node, clique in self.t2clique.items() if clique])
+        jtree.add_nodes_from(list(node_mapping))
+        
+        edges_to_add = []
+        for edge in self.t.edges():
+            e0, e1 = frozenset(self.t2clique[edge[0]]), frozenset(self.t2clique[edge[1]])
+            if e0 and e1:
+                edges_to_add.append((e0, e1))
+
+        jtree.add_edges_from(edges_to_add)
+        return jtree
+
+    def randomize(self):
+        """ Randomizes the tree"""
+        non_empty_cliques = {key for key, it in self.t2clique.items() if it}
+        root = np.random.choice(list(non_empty_cliques),1)[0]
+        edges = list(nx.bfs_edges(self.t, root))
+        running_set = self.t2clique[edges[0][0]].copy()
+        visited_set = {edges[0][0]}
+        new_edges = []
+        empty_t_nodes = set()
+        for edge in edges:
+            t_node = edge[1]
+            C = self.t2clique[t_node]
+            if C: 
+                S = running_set & C
+                if S:    
+                    possible_edges = [v for v in visited_set if S <= self.t2clique[v]]  # generator expression
+                    new_link = np.random.choice(possible_edges,1)[0]
+                else:
+                    new_link = np.random.choice(list(visited_set & non_empty_cliques),1)[0]
+                running_set.update(C)
+                new_edges.append((new_link, t_node))
+                visited_set.add(t_node)
+            else:
+                empty_t_nodes.add(t_node)
+                #new_link = np.random.choice(list(visited_set & non_empty_cliques),1)[0]
+        if empty_t_nodes:
+            empty_links = np.random.choice(list(non_empty_cliques), len(empty_t_nodes), replace=True)
+            new_edges += [(x, y) for x, y in zip(empty_t_nodes, empty_links)]  # Change this line
+        # Remove all existing edges from the graph
+        self.t.remove_edges_from(list(self.t.edges()))
+        # Add the new set of edges to the graph
+        self.t.add_edges_from(new_edges)
 
 class JunctionTree(nx.Graph):
 
