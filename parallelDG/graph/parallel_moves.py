@@ -148,3 +148,29 @@ def reverse_move_leafs_count(current_leafs, Cadj):
 
 def reverse_neighbors_count(tree, t_node, num_moves):
     return num_moves + 2 - tree.degree(t_node)
+
+
+
+def jt_to_graph_connect_move(clique_tupple,
+                             node,
+                             index=None,
+                             subindex=None):
+    new_clique = clique_tupple[0]
+    anchor_clique = clique_tupple[2]
+    simplix = new_clique - anchor_clique - node
+    node = list(node)[0]
+    # 0 for connection tyep
+    edges_to_add = [(index, subindex, 0, (node, y)) for y in set(simplix)]
+    return edges_to_add
+
+def jt_to_graph_disconnect_move(clique_tupple,
+                                node,
+                                index=None,
+                                subindex=None):
+    old_clq = clique_tupple[1]
+    anchor_clq = clique_tupple[2]
+    simplix = old_clq - anchor_clq - node
+    node = list(node)[0]
+    # 1 for disconnect type
+    edges_to_remove = [(index, subindex, 1, (node, y)) for y in set(simplix)]
+    return edges_to_remove
