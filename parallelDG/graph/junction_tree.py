@@ -5,6 +5,7 @@ Functions related to junction trees.
 import networkx as nx
 import numpy as np
 import itertools
+import parallelDG.graph.decomposable as dlib
 
 class JunctionMap:
     def __init__(self, junction_tree):
@@ -136,9 +137,8 @@ class JunctionMap:
     def to_junction_tree(self):
         # Creating a mapping from the original nodes to the new nodes (cliques)
         jtree = JunctionTree()
-        node_mapping = set([frozenset(clique) for node, clique in self.t2clique.items() if clique])
+        node_mapping = {frozenset(clique) for node, clique in self.t2clique.items() if clique}
         jtree.add_nodes_from(list(node_mapping))
-        
         edges_to_add = []
         for edge in self.t.edges():
             e0, e1 = frozenset(self.t2clique[edge[0]]), frozenset(self.t2clique[edge[1]])
@@ -148,6 +148,14 @@ class JunctionMap:
         jtree.add_edges_from(edges_to_add)
         return jtree
 
+    def randomize_by_jt(self):
+        graph = self.to_graph()
+        jt = dlib.junction_tree(graph)
+        randomize(jt)
+        self.t, self.t2clique = self.create_t_and_t2clique(jt)
+        self.node2t = self.create_node2t()
+
+        
     def randomize(self):
         """ Randomizes the tree"""
         non_empty_cliques = {key for key, it in self.t2clique.items() if it}
@@ -162,7 +170,11 @@ class JunctionMap:
             C = self.t2clique[t_node]
             if C: 
                 S = running_set & C
-                if S:    
+                if S:
+                    #if S == C:  # C is a subset of S
+                    #    self.t2clique[t_node] = set()
+                    #    empty_t_nodes.add(t_node)
+                    #    continue
                     possible_edges = [v for v in visited_set if S <= self.t2clique[v]]  # generator expression
                     new_link = np.random.choice(possible_edges,1)[0]
                 else:
@@ -180,6 +192,7 @@ class JunctionMap:
         self.t.remove_edges_from(list(self.t.edges()))
         # Add the new set of edges to the graph
         self.t.add_edges_from(new_edges)
+        #self.node2t = self.create_node2t()
 
 class JunctionTree(nx.Graph):
 

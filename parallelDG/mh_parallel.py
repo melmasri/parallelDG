@@ -184,6 +184,7 @@ def sample_trajectory(n_samples,
     k = int(0)
     tic = time.time()
     acc_ratios = []
+
     for i in tqdm(range(1, n_samples), desc="Metropolis-Hastings samples"):
         if i % randomize == 0:
             t.randomize()
@@ -199,9 +200,13 @@ def sample_trajectory(n_samples,
                 continue
             for U, Uadj in moves:
                 C, Cadj = t.t2clique[U], t.t2clique[Uadj]
+                C = frozenset(C)
+                #if C not in updatedC: 
+                #    updatedC.add(C)
+                #else:
+                #    continue
                 Cadj = frozenset(Cadj)
                 Cnew = frozenset(C | {node})
-                C = frozenset(C)
                 S =  frozenset(C & Cadj)
                 Snew = frozenset(Cnew & Cadj)
                 log_p2 = sd.log_likelihood_partial([Cnew],{Snew: [(Cadj, Cnew)]})
@@ -223,9 +228,13 @@ def sample_trajectory(n_samples,
                 continue
             for U, Uadj in moves: 
                 C, Cadj = t.t2clique[U], t.t2clique[Uadj]
+                C = frozenset(C)
+                #if C not in updatedC: 
+                #    updatedC.add(C)
+                #else:
+                #    continue
                 Cadj = frozenset(Cadj)
                 Cnew = frozenset(C - {node})
-                C = frozenset(C)
                 S =  frozenset(C & Cadj)
                 Snew = frozenset(Cnew & Cadj)
                 log_p2 = sd.log_likelihood_partial([Cnew],{Snew: [(Cadj, Cnew)]})
