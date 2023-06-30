@@ -226,6 +226,7 @@ def sample_trajectory(n_samples,
             if not moves:
                 log_prob_traj[i] = log_prob_traj[i-1]
                 continue
+            log_q = -np.log(2) if subtree.order() == 2 else 0.0
             for U, Uadj in moves: 
                 C, Cadj = t.t2clique[U], t.t2clique[Uadj]
                 C = frozenset(C)
@@ -241,7 +242,7 @@ def sample_trajectory(n_samples,
                 log_p1 = sd.log_likelihood_partial([C], {S: [(Cadj, C)]})
                 log_g2 = sd_graph.log_prior_partial(Cnew, Snew)
                 log_g1 = sd_graph.log_prior_partial(C, S)
-                ratios = (log_p2 - log_p1, log_g2 - log_g1, 0)
+                ratios = (log_p2 - log_p1, log_g2 - log_g1, log_q)
                 acc_ratios.append((i, ) + ratios)
                 alpha = min(1, np.exp(np.sum(ratios)))
                 k += int(1)
