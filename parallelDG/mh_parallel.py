@@ -201,10 +201,6 @@ def sample_trajectory(n_samples,
             for U, Uadj in moves:
                 C, Cadj = t.t2clique[U], t.t2clique[Uadj]
                 C = frozenset(C)
-                #if C not in updatedC: 
-                #    updatedC.add(C)
-                #else:
-                #    continue
                 Cadj = frozenset(Cadj)
                 Cnew = frozenset(C | {node})
                 S =  frozenset(C & Cadj)
@@ -230,10 +226,6 @@ def sample_trajectory(n_samples,
             for U, Uadj in moves: 
                 C, Cadj = t.t2clique[U], t.t2clique[Uadj]
                 C = frozenset(C)
-                #if C not in updatedC: 
-                #    updatedC.add(C)
-                #else:
-                #    continue
                 Cadj = frozenset(Cadj)
                 Cnew = frozenset(C - {node})
                 S =  frozenset(C & Cadj)
