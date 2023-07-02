@@ -5,7 +5,7 @@ Functions related to junction trees.
 import networkx as nx
 import numpy as np
 import itertools
-import parallelDG.graph.decomposable as dlib
+#import parallelDG.graph.decomposable as dlib
 
 class JunctionMap:
     def __init__(self, junction_tree):
@@ -150,10 +150,13 @@ class JunctionMap:
 
     def randomize_by_jt(self):
         graph = self.to_graph()
+        import parallelDG.graph.decomposable as dlib
         jt = dlib.junction_tree(graph)
-        randomize(jt)
         self.t, self.t2clique = self.create_t_and_t2clique(jt)
         self.node2t = self.create_node2t()
+        self.randomize()
+        #self.t, self.t2clique = self.create_t_and_t2clique(jt)
+        #self.node2t = self.create_node2t()
 
         
     def randomize(self):
