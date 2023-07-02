@@ -88,6 +88,32 @@ class JunctionPenalty(SequentialJTDistribution):
         return 0.0
 
 
+class RandomWalkPenalty(SequentialJTDistribution):
+    """  Penalizes the the random walk
+    """
+    def __init__(self, alpha= 0.5):
+        self.alpha = alpha
+
+    def log_prior(self, cliques, seperators):
+        return 0.0
+
+    def log_prior_partial(self, clq, sep, **args):
+        if 'disconnect' in args:
+            return np.log(1-self.alpha)
+        return np.log(self.alpha)
+        
+    def log_ratio(self,
+                  old_cliques,
+                  old_separators,
+                  new_cliques,
+                  new_separators,
+                  old_JT,
+                  new_JT):
+        return 0.0
+
+
+
+    
 
 class GraphUniform(SequentialJTDistribution):
     """  Uniform sampling over decomposable graphs, i.e pi(G) ~ 1/|jt(G)|
