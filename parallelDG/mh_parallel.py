@@ -58,14 +58,16 @@ def sample_trajectory_single_move(n_samples,
     gtraj.set_init_graph(graph) 
     gtraj.set_init_jt(jt)
     log_prob_traj[0] = sd.log_likelihood_partial(t.get_cliques(), t.get_separators())
+    log_prob_traj[0] += sd_graph.log_prior(t.get_cliques(), t.get_separators())
     update_moves = list()
-    num_nodes = len(graph)
+    num_nodes = sd.p
     k = int(0)
     tic = time.time()
     acc_ratios = []
     for i in tqdm(range(1, n_samples), desc="Metropolis-Hastings samples"):
         if i % randomize == 0:
             t.randomize()
+            #t.randomize_by_jt()
         node = np.random.randint(p)
         move_type = np.random.randint(2)
         log_p = 0.0
@@ -90,7 +92,7 @@ def sample_trajectory_single_move(n_samples,
             log_p2 = sd.log_likelihood_partial([Cnew],{Snew: [(Cadj, Cnew)]})
             log_p1 = sd.log_likelihood_partial([C], {S: [(Cadj, C)]})
             log_g2 = sd_graph.log_prior_partial(Cnew, Snew)
-            log_g1 = sd_graph.log_prior_partial(C, S)
+            log_g1 = sd_graph.log_prior_partial(C, S, disconnect=True)
             log_q2 = -np.log(num_moves)
             log_q1 = -np.log(num_reverse_moves)
             ratios = (log_p2 - log_p1, log_g2 - log_g1, log_q2 - log_q1)
@@ -118,7 +120,7 @@ def sample_trajectory_single_move(n_samples,
             Snew = frozenset(Cnew & Cadj)
             log_p2 = sd.log_likelihood_partial([Cnew],{Snew: [(Cadj, Cnew)]})
             log_p1 = sd.log_likelihood_partial([C], {S: [(Cadj, C)]})
-            log_g2 = sd_graph.log_prior_partial(Cnew, Snew)
+            log_g2 = sd_graph.log_prior_partial(Cnew, Snew,  disconnect=True)
             log_g1 = sd_graph.log_prior_partial(C, S)
             log_q2 = -np.log(num_moves)
             log_q1 = -np.log(num_reverse_moves)
@@ -179,6 +181,7 @@ def sample_trajectory(n_samples,
     gtraj.set_init_jt(jt)
     
     log_prob_traj[0] = sd.log_likelihood_partial(t.get_cliques(), t.get_separators())
+    log_prob_traj[0] += sd_graph.log_prior(t.get_cliques(), t.get_separators())
     update_moves = list()
     num_nodes = sd.p
     k = int(0)
@@ -261,7 +264,8 @@ def get_prior(graph_prior):
         "mbc": (seqdist.ModifiedBornnCaron, [2.0, 4.0]),
         "edgepenalty": (seqdist.EdgePenalty, [0.001]),
         "junctionpenalty": (seqdist.JunctionPenalty, [0.25]),
-        "uniform": (seqdist.GraphUniform, [])
+        "uniform": (seqdist.GraphUniform, []),
+        "randomwalk" :(seqdist.RandomWalkPenalty, [0.5])
     }
 
     if graph_prior_type not in default_parameters:
@@ -310,12 +314,12 @@ def sample_trajectory_ggm(dataframe,
                           D=None,
                           delta=1.0,
                           graph_prior=['mbc', 2.0, 4.0],
-                          cache={}, **args):
+                          **args):
     p = dataframe.shape[1]
     if D is None:
         D = np.identity(p)
     sd = seqdist.GGMJTPosterior()
-    sd.init_model(np.asmatrix(dataframe), D, delta, cache)
+    sd.init_model(np.asmatrix(dataframe), D, delta, cache = {})
     sd_graph = get_prior(graph_prior)
 
     if 'single_move' in args:
@@ -336,7 +340,6 @@ def trajectory_to_file(n_samples,
                        randomize,
                        seqdist,
                        seqdist_graph,
-                       reset_cache=True,
                        output_directory=".",
                        reseed=False,
                        labels=None,
@@ -360,7 +363,7 @@ def trajectory_to_file(n_samples,
                                          randomize,
                                          seqdist,
                                          seqdist_graph,
-                                         reset_cache=reset_cache,
+                                         reset_cache=True,
                                          **args)
     output_filename = args.get("output_filename", None)
     seed = args.get('seed', int(time.time()))
@@ -399,7 +402,7 @@ def sample_trajectories_ggm_to_file(dataframe,
             for r in randomize:
                 for d in delta:
                     sd = seqdist.GGMJTPosterior()
-                    sd.init_model(np.asmatrix(dataframe), D, d, {})
+                    sd.init_model(np.asmatrix(dataframe), D, d, cache={})
                     graph_trajectory = trajectory_to_file(n_samples=T,
                                                           randomize=r,
                                                           seqdist=sd,
@@ -434,7 +437,7 @@ def sample_trajectories_ggm_parallel(dataframe,
             for r in randomize:
                 for d in delta:
                     sd = seqdist.GGMJTPosterior()
-                    sd.init_model(np.asmatrix(dataframe), D, d, {})
+                    sd.init_model(np.asmatrix(dataframe), D, d, cache={})
                     print("Starting: " + str((T, r, str(sd), reset_cache, True)))
                     proc = Process(target=trajectory_to_queue,
                                    args=(T, r, sd, sd_graph,
@@ -625,7 +628,7 @@ def ggm_loglikelihood(dataframe,
     if D is None:
         D = np.identity(p)
     sd = seqdist.GGMJTPosterior()
-    sd.init_model(np.asmatrix(dataframe), D, delta)
+    sd.init_model(np.asmatrix(dataframe), D, delta, cache)
     sd_graph = get_prior(graph_prior)
     jt = dlib.junction_tree(graph)
     seps = jtlib.separators(jt)
@@ -651,9 +654,9 @@ def loglinear_loglekihood(dataframe,
                   levels, {}, {})
     sd_graph = get_prior(graph_prior)
     
-    jtr = dlib.junction_tree(graph)
-    seps = jtlib.separators(jtr)
-    clqs = jtr.nodes()
-    logl = sd.log_likelihood(jtr)
+    jt = dlib.junction_tree(graph)
+    seps = jtlib.separators(jt)
+    clqs = jt.nodes()
+    logl = sd.log_likelihood(jt)
     logl += sd_graph.log_prior(clqs, seps)
     return logl
