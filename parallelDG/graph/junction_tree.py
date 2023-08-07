@@ -5,6 +5,7 @@ Functions related to junction trees.
 import networkx as nx
 import numpy as np
 import itertools
+from functools import reduce
 #import parallelDG.graph.decomposable as dlib
 
 class JunctionMap:
@@ -15,7 +16,7 @@ class JunctionMap:
         self.node2t = self.create_node2t()
 
 
-    def create_t_and_t2clique(self, jt):
+    def create_t_and_t2clique(self, jt, p = None):
         """
         This function transforms a junction tree into a new graph where the original cliques are mapped to integer identifiers.
         Singleton nodes in the original tree, if any, are connected to randomly chosen nodes in the new graph.
@@ -30,29 +31,37 @@ class JunctionMap:
         # Extract graph nodes
 
         # Create mappings for junction tree cliques and corresponding integer identifiers
-        t2clique = {k: set(C) for k, C in enumerate(jt.nodes())}  # Convert each frozenset to a set
+        if not p:
+            p = self.p
+        t2clique = {k:set() for k in range(p)}
+
+        keys = list(t2clique.keys())
+        np.random.shuffle(keys)
+        for i, C in enumerate(jt.nodes()):
+            k = keys[i]
+            t2clique[k] = set(C)         # Convert each frozenset to a set
         clique2t = {frozenset(v): k for k, v in t2clique.items()}  # Use frozenset for dictionary keys
 
         # Initialize new graph
         t = nx.Graph()
-        t.add_nodes_from(range(self.p))
+        t.add_nodes_from(range(p))
 
         # Add edges based on junction tree structure
         edges_to_add = [(clique2t[edge[0]], clique2t[edge[1]]) for edge in jt.edges()]
         t.add_edges_from(edges_to_add)
 
         # Identify singleton nodes
-        singletons = [node for node in t.nodes() if t.degree(node) == 0]
+        singletons = [node for node in t.nodes() if t.degree(node) == 0 and not t2clique[node]]
 
         # If there are any singleton nodes, randomly connect them to existing nodes
         if singletons:
-            non_empty_nodes = max(t2clique.keys())
+            non_empty_set = set(range(p)) - set(singletons)
             for node in singletons:
-                target_node = np.random.randint(non_empty_nodes)
+                target_node = np.random.choice(list(non_empty_set))
                 t.add_edge(node, target_node)
                 # Add singleton nodes to the t2clique dictionary with empty clique
                 t2clique[node] = set()
-
+                non_empty_set.add(node)
         return t, t2clique
 
 
@@ -73,6 +82,7 @@ class JunctionMap:
             t_node: The tree node identifier.
             g_node: The graph node identifier.
         """
+        
         self.node2t[g_node].add(t_node)
         self.t2clique[t_node].add(g_node)
 
@@ -85,6 +95,7 @@ class JunctionMap:
             g_node: The graph node identifier.
         
         """
+        
         self.node2t[g_node].remove(t_node)
         self.t2clique[t_node].remove(g_node)
 
@@ -96,25 +107,97 @@ class JunctionMap:
         """
         return [frozenset(clique) for clique in self.t2clique.values() if clique]
 
-    def get_separators(self):
+    def get_separators(self, return_graph_sep = True):
         """ Returns the dictionary of separators from the tree and its t2clique dictionary.
 
         Returns:
             separators (dict): Dict with separators as keys and list of associated edges as values.
         """
         separators =dict()  # Using a dict to store separators and their associated edges
+        t_separators = dict()
         for edge in self.t.edges():
             clique_a = self.t2clique.get(edge[0], set())
             clique_b = self.t2clique.get(edge[1], set())
-            if clique_a and clique_b:  # Ensure both cliques are not empty
-                separator = frozenset(clique_a.intersection(clique_b))
-                if separator in separators:
-                    separators[separator].append((clique_a, clique_b))
-                else:
-                    separators[separator] = [(clique_a, clique_b)]
-        return separators
+            #if clique_a and clique_b:  # Ensure both cliques are not empty
+            separator = frozenset(clique_a.intersection(clique_b))
+            if separator in separators:
+                separators[separator].append((clique_a, clique_b))
+                t_separators[separator].append(edge)
+            else:
+                separators[separator] = [(clique_a, clique_b)]
+                t_separators[separator] = [edge]
+        if return_graph_sep: 
+            return separators
+        else:
+            return t_separators
 
 
+    def n_subtrees(self, sep):
+        if self.t.size() == 0:
+            return [1]
+        visited = set()
+        start_nodes = set()
+        leaf = None
+        counts = []
+        graph_sep = self.t2clique[sep[0]] & self.t2clique[sep[1]]
+        for n in self.t.nodes():
+            valid_neighs = [ne for ne in self.t.neighbors(n) if graph_sep <= self.t2clique[ne]]
+            if len(valid_neighs) == 1 and graph_sep <= self.t2clique[n]:
+                leaf = n
+                break
+
+        start_nodes.add(leaf)
+        prev_visited = 0
+        while len(start_nodes) > 0:
+            n = start_nodes.pop()
+            self.n_subtrees_aux(n, graph_sep, visited, start_nodes)
+            counts += [len(visited) - prev_visited]
+            prev_visited = len(visited)
+
+        return counts
+
+    def n_subtrees_aux(self, node, graph_sep, visited, start_nodes):
+        visited.add(node)
+        #for n in nx.neighbors(tree, node):
+        for n in self.t.neighbors(node):
+            if graph_sep <= self.t2clique[n]:
+                if n not in visited:
+                    if self.t2clique[n] & self.t2clique[node] == graph_sep:
+                        start_nodes.add(n)
+                    else:
+                        self.n_subtrees_aux(n, graph_sep, visited, start_nodes)
+
+    def log_nu(self, s):
+        """ Returns the number of equivalent junction trees for tree where
+            tree is cut at the separator s and then constructed again.
+
+        Args:
+            s (set): A separator of tree
+
+        Returns:
+            float
+        """
+        f = np.array(self.n_subtrees(s))
+        ts = f.ravel().sum()
+        ms = len(f) - 1
+        return np.log(f).sum() + np.log(ts) * (ms - 1)
+
+    def log_n_junction_trees(self, S):
+        """ Returns the number of junction trees equivalent to tree where trees
+        is cut as the separators in S. is S i the full set of separators in tree,
+        this is the number of junction trees equivalent to tree.
+
+        Args:
+            S (list): List of separators of tree
+        Returns:
+            float
+        """
+        log_mu = 0.0
+        for sep, t_edges in S.items():
+            log_mu += self.log_nu(t_edges[0])
+        return log_mu
+
+    
     def to_graph(self):
         """
         Returns the graph underlying the integer identifier tree.
@@ -126,6 +209,7 @@ class JunctionMap:
             G (networkx.Graph): An undirected graph.
         """
         G = nx.Graph()
+        G.add_nodes_from(range(self.p))
         for t_node, clique in self.t2clique.items():
             if len(clique) == 1:
                 G.add_node(list(clique)[0])  # add singleton nodes
@@ -152,16 +236,57 @@ class JunctionMap:
         graph = self.to_graph()
         import parallelDG.graph.decomposable as dlib
         jt = dlib.junction_tree(graph)
-        self.t, self.t2clique = self.create_t_and_t2clique(jt)
+        randomize(jt)
+        self.t, self.t2clique = self.create_t_and_t2clique(jt, jt.order())
         self.node2t = self.create_node2t()
-        self.randomize()
+        #self.randomize()
         #self.t, self.t2clique = self.create_t_and_t2clique(jt)
         #self.node2t = self.create_node2t()
 
-        
     def randomize(self):
+        """ Returns a random junction tree equivalent to tree.
+
+        Args:
+            s (set): A separator of tree format {sep: [(e1,e2), (e3, e4)]}
+
+        Returns:
+            NetworkX graph
+        """
+        S = self.get_separators(return_graph_sep = False)
+        for graph_sep, t_edges in S.items():
+            self.randomize_at_sep(graph_sep, t_edges)
+        
+
+    def randomize_at_sep(self, graph_sep, t_edges):
+        """ Returns a junction tree equivalent to tree where tree is cut at s
+        and then reconstructed at random.
+
+        Args:
+            s (set): A separator of tree
+
+        Returns:
+            NetworkX graph
+        """
+        ## get teh subtree
+        if graph_sep:
+            subtree_set = reduce(set.intersection, [self.node2t[n] for n in graph_sep])
+            subtree = self.t.subgraph(subtree_set).copy()
+        else:
+            subtree = self.t.copy()
+        subtree.remove_edges_from(t_edges)
+        new_edges = random_tree_from_forest(subtree)
+        # Remove old edges associated with s
+        self.t.remove_edges_from(t_edges)
+        # Add the new edges
+        self.t.add_edges_from(new_edges)
+        
+
+        
+    def randomize_bfs(self):
         """ Randomizes the tree"""
         non_empty_cliques = {key for key, it in self.t2clique.items() if it}
+        if not non_empty_cliques:  # set a root
+            non_empty_cliques = set([np.random.randint(self.p)])
         root = np.random.choice(list(non_empty_cliques),1)[0]
         edges = list(nx.bfs_edges(self.t, root))
         running_set = self.t2clique[edges[0][0]].copy()
@@ -551,6 +676,7 @@ def randomize_at_sep(tree, s):
     #    tree.add_edge(e[0], e[1])
 
 
+    
 def randomize(tree):
     """ Returns a random junction tree equivalent to tree.
 
@@ -572,9 +698,9 @@ def random_tree_from_forest(F, edge_label=""):
         F (NetworkX graph): A forest.
         edge_label (string): Labels for the edges.
     """
-    comps = F.connected_component_vertices()
 
-    #comps = [list(c) for c in nx.connected_components(F)]
+    #comps = F.connected_component_vertices()
+    comps = [list(c) for c in nx.connected_components(F)]
     #comps = [list(t.nodes()) for t in F.connected_components(prune=False)]
     q = len(comps)
     p = F.order()
