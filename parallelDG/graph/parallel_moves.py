@@ -35,6 +35,45 @@ def leaf_nodes(tree):
     return {node for node, degree in dict(tree.degree()).items() if degree == 1}
 
 
+def leafs_nodes_set(node_set, tree):
+    """
+    This function takes a tree and returns a list of its leaf nodes.
+
+    Args:
+        tree (networkx.Graph): The input tree.
+        node_set (int): is the subset of nodes of tree, that we want the leafs for
+
+    Returns:
+        leaf_nodes (list): A list of leaf nodes in the tree.
+    """
+    # Convert degree view to list of tuples and use list comprehension to find leaf nodes
+    leafs = set()
+    for vertex in node_set: 
+        if len(set(tree.neighbors(vertex)) & node_set) == 1: 
+            leafs.add(vertex)
+    return leafs
+
+
+def leafs_and_adj_nodes_set(node_set, tree):
+    """
+    This function takes a tree and returns a list of its leaf nodes.
+
+    Args:
+        tree (networkx.Graph): The input tree.
+        node_set (int): is the subset of nodes of tree, that we want the leafs for
+
+    Returns:
+        leaf_nodes (list): A list of leaf nodes in the tree.
+    """
+    # Convert degree view to list of tuples and use list comprehension to find leaf nodes
+    leafs = []
+    for vertex in node_set: 
+        if len(set(tree.neighbors(vertex)) & node_set) == 1: 
+            leafs.add(vertex)
+    return leafs
+
+
+
 def neighboring_nodes(tree, subtree):
     """
     This function takes a tree and a subtree, and returns a set of nodes in the tree that are adjacent to at least one node in the subtree but are not in the subtree itself.
@@ -71,7 +110,35 @@ def propose_connect_moves(tree, subtree):
     Returns:
       tuple: The neighboring nodes to the subtree and their count.
     """
-    neighboring_nodes_set = find_neighbors_and_adjacent_nodes(tree, subtree)
+    if subtree: 
+        neighboring_nodes_set = find_neighbors_and_adjacent_nodes(tree, subtree)
+    else: 
+        neighboring_nodes_set = [(n,{}) for n in  tree.nodes()][:1]
+
+    return neighboring_nodes_set, len(neighboring_nodes_set)
+
+
+def propose_connect_moves_set(tree, subtree):
+    """ 
+    Proposes a random set of connect moves, given the current state of
+    the junction tree. Returns the set of new junction tree nodes,
+    after performing the move directly on the tree, and the number
+    of those nodes.
+
+    Args:
+      tree (networkx.Graph): A junction tree.
+      subtree (networkx.Graph): A subtree of the junction tree.
+
+    Returns:
+      tuple: The neighboring nodes to the subtree and their count.
+    """
+    if subtree: 
+        neighboring_nodes_set = find_neighbors_and_adjacent_nodes_set(tree, subtree)
+    else:
+        existing_nodes = np.random.choice(list(tree.nodes()))
+        neighboring_nodes_set = [(existing_nodes,{})]
+        #neighboring_nodes_set = [(n,{}) for n in existing_nodes]
+
     return neighboring_nodes_set, len(neighboring_nodes_set)
 
 
@@ -93,11 +160,54 @@ def propose_disconnect_moves(tree, subtree, all_leafs=False):
         return leafs, len(leafs)
     if subtree.order() == 2:
         return [random.choice(list(leafs))], 2
+    if subtree.order() == 1:
+        return [(list(subtree.nodes())[0], set([]))], 1
     else:
         return leafs, len(leafs)
-    
-    
 
+
+def propose_disconnect_moves_set(tree, subtree, all_leafs=False):
+    """ 
+    Proposes a random set of disconnect moves, given the current state of
+    the junction tree. Returns a leaf node of the subtree and its count.
+
+    Args:
+      tree (networkx.Graph): A junction tree.
+      subtree (networkx.Graph): A subtree of the junction tree.
+
+    Returns:
+      tuple: Leaf nodes of the subtree and their count.
+    """
+    leafs = find_leaf_and_adjacent_nodes_set(subtree, tree)
+    if all_leafs:
+        return leafs, len(leafs)
+    if len(subtree) == 2:
+        return [random.choice(list(leafs))], 2
+    if len(subtree) == 1:
+        return [(list(subtree)[0], set([]))], 1
+    else:
+        return leafs, len(leafs)
+
+
+
+def find_leaf_and_adjacent_nodes_set(subtree, tree):
+    """
+    This function returns a list of tuples of leaf nodes and their connected nodes in the tree.
+
+    Args:
+       subtree (networkx.Graph): A subtree of the tree.
+
+    Returns:
+       list of tuples: Each tuple is in the format (leaf, connected_node) where leaf is a leaf node in the subtree and connected_node is a node in the tree connected to the leaf.
+    """
+    leaf_and_adjacent_nodes = []
+    for leaf in subtree:
+        adj = list(set(tree.neighbors(leaf)) & subtree)
+        if len(adj) == 1:
+            leaf_and_adjacent_nodes.append((leaf, adj[0]))
+    return leaf_and_adjacent_nodes
+
+    
 def find_leaf_and_adjacent_nodes(subtree):
     """
     This function returns a list of tuples of leaf nodes and their connected nodes in the tree.
@@ -110,11 +220,12 @@ def find_leaf_and_adjacent_nodes(subtree):
     """
     leaf_nodes_in_subtree = leaf_nodes(subtree)
     leaf_and_adjacent_nodes = []
-
+    
     for leaf in leaf_nodes_in_subtree:
             adjacent_node = list(subtree.neighbors(leaf))[0]
             leaf_and_adjacent_nodes.append((leaf, adjacent_node))    
     return leaf_and_adjacent_nodes
+
 
 
 def find_neighbors_and_adjacent_nodes(tree, subtree):
@@ -139,6 +250,29 @@ def find_neighbors_and_adjacent_nodes(tree, subtree):
     return nodes_and_adjacent_in_tree
 
 
+def find_neighbors_and_adjacent_nodes_set(tree, subtree):
+    """
+    This function returns a list of tuples of nodes in the subtree and their connected nodes in the tree.
+
+    Args:
+       tree (networkx.Graph): A tree.
+       subtree (networkx.Graph): A subtree of the tree.
+
+    Returns:
+       list of tuples: Each tuple is in the format (node, connected_node) where node is a node in the subtree and connected_node is a node in the tree connected to the node.
+    """
+    nodes_and_adjacent_in_tree = []
+
+    for node in subtree:
+        neighboring_nodes = set(tree.neighbors(node)) - subtree
+
+        for nei_node in neighboring_nodes:
+            nodes_and_adjacent_in_tree.append((nei_node, node))
+    
+    return nodes_and_adjacent_in_tree
+
+
+
 def is_adj_clique_in_set(C_adj, move_set): 
     return np.all([C_adj != C[0] for C in move_set])
 
@@ -148,7 +282,6 @@ def reverse_move_leafs_count(current_leafs, Cadj):
 
 def reverse_neighbors_count(tree, t_node, num_moves):
     return num_moves + 2 - tree.degree(t_node)
-
 
 
 def jt_to_graph_connect_move(clique_tupple,
