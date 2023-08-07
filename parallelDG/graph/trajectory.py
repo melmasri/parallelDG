@@ -14,6 +14,7 @@ import parallelDG.graph.junction_tree as jtlib
 from parallelDG.graph import graph as glib
 import parallelDG.graph.decomposable as dlib
 import parallelDG.graph.parallel_moves as pmlib
+import copy
 
 class Trajectory:
     """
@@ -93,6 +94,35 @@ class Trajectory:
                 g += pmlib.jt_to_graph_disconnect_move(m[4], m[3], m[0], m[1])
         self.set_graph_updates(g)
 
+
+    def set_t_trajectory(self, **kwargs):
+        G = self.init_graph
+        jt = dlib.junction_tree(G)
+        t = jtlib.JunctionMap(jt)
+        index_type = kwargs.get('index_type', 'mcmc_index')
+        print(index_type)
+        if index_type == 'mcmc_index':
+            t_traj = [None] * self.sampling_method['params']['samples']
+            i = 0
+        else:
+            t_traj = [None] * self.n_updates
+            i = 1
+        t_traj[0] = copy.deepcopy(t.t2clique)
+        i = 0
+        for move in self.t_updates:
+            if move[2] == 0:     # connect
+                t.connect(move[4], move[3])
+            else:               #  disconnect
+                t.disconnect(move[4], move[3])
+            t_traj[move[i]-1] = copy.deepcopy(t.t2clique)
+
+        for idx, val in enumerate(t_traj):
+            if idx == 0:
+                continue  # skip the first element
+            if not val:
+                t_traj[idx] = t_traj[idx-1]
+        return t_traj
+        
     def set_graph_trajectories(self, **kwargs):
         if not self.graph_updates:
             self.jt_to_graph_updates()
@@ -113,7 +143,6 @@ class Trajectory:
             if move[2] == 1:  # disconnect
                 g.remove_edge(*move[3])
             graph_traj[move[i]-1] = g.copy()
-            
             # Fill forward graph traj
         for idx, val in enumerate(graph_traj):
             if idx == 0:
