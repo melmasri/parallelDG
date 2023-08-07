@@ -13,6 +13,7 @@ import random
 import datetime
 import itertools as its
 import copy
+import itertools
 
 from sys import platform as sys_pf
 if sys_pf == 'darwin':
@@ -412,11 +413,16 @@ def edges_powerset(p):
     "return all graphs of size p"
     return list(its.combinations(list(range(p)), 2))
 
-
 def hash_graph(G):
     "hashing a graph by ordering the edge set"
     ed = [tuple(sorted(e)) for e in G.edges()]
     return hash(str(sorted(ed)))
+
+def hash_t2clique(t2clique):
+    cliques = list()
+    for C in t2clique.values():
+        cliques.append(tuple(sorted(list(C))))
+    return hash(str(sorted(cliques)))
 
 def most_sampled_graph(traj):
     """ Returns the most sampled graph from a graph trajectories"""
@@ -433,6 +439,57 @@ def most_sampled_graph(traj):
     key = max(graph_dict, key=lambda k: graph_dict[k]['count'])
     return graph_dict[key]
 
+def to_graph(t2clique):
+    """
+    Returns the graph underlying the integer identifier tree.
+
+    Args:
+        t2clique (dict): A dictionary mapping from new integer identifiers to original cliques.
+
+    Returns:
+        G (networkx.Graph): An undirected graph.
+    """
+    G = nx.Graph()
+    p = len(t2clique)
+    G.add_nodes_from(range(p))
+    for t_node, clique in t2clique.items():
+        if len(clique) == 1:
+            G.add_node(list(clique)[0])  # add singleton nodes
+        else:
+            for node1, node2 in itertools.combinations(clique, 2):
+                G.add_edge(node1, node2)
+    return G
+
+def count_trees(t2clique_traj):
+    "counting the number of latent trees"
+
+    graph_dict = dict()
+    prev_hash = None # to remove repeated graph, where no traj changes
+    for g in t2clique_traj:
+        if not g:
+            continue
+        b = hash_t2clique(g)
+        if b == prev_hash:
+            continue
+        prev_hash = b
+        if b in graph_dict: 
+            graph_dict[b]['count'] += 1.0
+        else:
+            graph_dict[b] = {'count': 1.0, 'g': hash_graph(to_graph(g))}
+
+    return graph_dict
+
+def count_decomposable_graphs_trajectories(traj):
+    ## counting the number of decomposable graphs
+    graph_counts = dict()
+    for g in traj:
+        b = hash_graph(g)
+        if b in graph_counts:
+            graph_counts[b]['count'] += 1.0
+        else: 
+            graph_counts[b] = {'count': 1.0, 'nedges': g.size(), 'nnodes': g.order(), 'g': g.edges()}
+    return graph_counts
+
 
 def count_decomposable_graphs(size, traj, decomp_index_table):
     "counting the number of decomposable graphs"
@@ -446,18 +503,22 @@ def count_decomposable_graphs(size, traj, decomp_index_table):
         if b == prev_hash:
             continue
         prev_hash = b
-        c = graph_dict[b]['count']
-        graph_dict[b]['count'] = 1 + c
+        graph_dict[b]['count'] += 1.0 
                                 
     return graph_dict
 
 
 def pdf_plot(x):
     "plotting the probability density function"
+    x = x.values
     a = float(np.sum(x))
     b = np.cumsum(x)
-    ax = pd.Series(b/a).plot()
-    plt.plot([0, 1], [0, 1], transform=ax.transAxes)
+    ax = pd.Series(b/a).plot(color='black', linestyle='dashed', linewidth = 0.75)
+    N = len(x)
+    plt.plot([0, N], [0, 1], color='black', linewidth=0.5)
+    plt.grid(False)
+    plt.show()
+    
 
 
 def acceptance_ratio(traj):
@@ -514,6 +575,24 @@ def autocorrelation_plot(series,
     ax.grid()
     return ax
 
+
+def get_trees(graphs):
+    trees = dict()
+    for a in graphs:
+        a = list(a)
+        G = nx.Graph()
+        G.add_edges_from(a)
+        if G.size() == 0:
+            G.add_node(0)
+        if nx.is_tree(G):  
+            b = hash_graph(G)
+            trees[b] = {'count': 0,
+                        'n_edges': G.size(),
+                        'n_nodes': G.order(),
+                        'g': a}
+        G.clear()
+    return trees
+    
     
 def filter_decomposable_graphs(graphs, graph_size):
     """ returns decomposable graphs out of powerset of graphs 
@@ -521,6 +600,7 @@ def filter_decomposable_graphs(graphs, graph_size):
     """
     decomp = dict()
     import parallelDG.graph.junction_tree as jtlib
+    import parallelDG.graph.decomposable as ndlib
     for a in graphs:
         a = list(a)
         G = nx.Graph()
@@ -529,10 +609,51 @@ def filter_decomposable_graphs(graphs, graph_size):
         if nx.is_chordal(G): 
             b = hash_graph(G)
             n_jt = jtlib.n_junction_trees_graph(G)
+            jt =  ndlib.junction_tree(G)
             decomp[b] = {'count': 0, 'nedges': G.size(),
                          'g': a,
-                         'n_jt':
-                         n_jt, 'nnodes': graph_size}
+                         'n_jt': n_jt,
+                         'n_clqs': jt.order(),
+                         'n_sep' : jt.size(),
+                         'nnodes': graph_size,
+                         'jt': jt,
+                         'n_t': 0}
         G.clear()
     return decomp
 
+
+def get_value(value_str, di):
+    return [g[value_str] for g in di.values()]
+
+def save_decomposable_table(table, filename):
+    _col_decom = ['index', 'nnodes', 'nedges', 'g', 'n_jt', 'n_clqs', 'n_sep', 'n_t']
+    decom = pd.DataFrame.from_dict(table, orient='index').reset_index().sort_values(by = 'n_jt', ascending=False)
+    if filename:
+        decom.to_csv(filename)
+
+    
+
+def join_with_decom_table(graph_counts, decomp_table):
+    _col = ['index', 'count']
+    _col_decom = ['index', 'nnodes', 'nedges', 'g', 'n_jt', 'n_clqs', 'n_sep', 'n_t']
+    if type(decomp_table) == dict: 
+        decom = pd.DataFrame.from_dict(decomp_table, orient='index').reset_index()
+    else:
+        decom = decomp_table
+    sample_df = pd.DataFrame.from_dict(graph_counts, orient='index').reset_index()
+    return decom[_col_decom].merge(sample_df[_col], how='left').sort_values(by = 'n_jt', ascending=False)
+
+def graphs_to_t(tree_table):
+    result_dict = {}
+    for key, value in tree_table.items():
+        g_value = value['g']
+        count_value = value['count']
+
+        # If 'g' value already exists in the result_dict
+        if g_value in result_dict:
+            result_dict[g_value]['unique_t'] += 1
+            result_dict[g_value]['count_sum'] += count_value  
+        else:
+            # If 'g' value does not exist in the result_dict
+            result_dict[g_value] = {'unique_t': 1, 'count_sum': count_value}
+    return result_dict
