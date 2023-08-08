@@ -287,7 +287,7 @@ def sample_trajectory(n_samples,
             if not moves:
                 log_prob_traj[i] = log_prob_traj[i-1]
                 continue
-            log_q = -np.log(2) if subtree_n_nodes else 0.0
+            log_q = -np.log(2) if subtree_n_nodes == 2 else 0.0
             for U, Uadj in moves:
                 C =  t.t2clique[U]
                 if isinstance(Uadj, int): 
