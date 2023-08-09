@@ -237,7 +237,7 @@ class JunctionMap:
         import parallelDG.graph.decomposable as dlib
         jt = dlib.junction_tree(graph)
         randomize(jt)
-        self.t, self.t2clique = self.create_t_and_t2clique(jt, jt.order())
+        self.t, self.t2clique = self.create_t_and_t2clique(jt, self.p)
         self.node2t = self.create_node2t()
         #self.randomize()
         #self.t, self.t2clique = self.create_t_and_t2clique(jt)
@@ -255,7 +255,25 @@ class JunctionMap:
         S = self.get_separators(return_graph_sep = False)
         for graph_sep, t_edges in S.items():
             self.randomize_at_sep(graph_sep, t_edges)
-        
+
+    def randomize_at_sep_single(self):
+        """ Returns a random junction tree equivalent to tree.
+
+        Args:
+            s (set): A separator of tree format {sep: [(e1,e2), (e3, e4)]}
+
+        Returns:
+            NetworkX graph
+        """
+        edge_index = np.random.choice(self.t.number_of_edges(), 1)[0]
+        edge = list(self.t.edges())[edge_index]
+        clique_a = self.t2clique.get(edge[0], set())
+        clique_b = self.t2clique.get(edge[1], set())
+        #if clique_a and clique_b:  # Ensure both cliques are not empty
+        graph_sep = frozenset(clique_a.intersection(clique_b))
+        self.randomize_at_sep(graph_sep, [edge])
+
+
 
     def randomize_at_sep(self, graph_sep, t_edges):
         """ Returns a junction tree equivalent to tree where tree is cut at s
