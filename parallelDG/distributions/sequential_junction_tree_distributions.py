@@ -42,7 +42,7 @@ class ModifiedBornnCaron(SequentialJTDistribution):
     def log_potential(self, param, clq_size):
         return param * (clq_size)
     
-    def log_prior(self, cliques, seperators):
+    def log_prior(self, cliques, seperators, extra_arg=None):
         lclq = 0.0
         lsep = 0.0
         for c in cliques:
@@ -51,7 +51,7 @@ class ModifiedBornnCaron(SequentialJTDistribution):
             lsep += self.log_potential(self.param_sep, len(s))
         return lclq - lsep
 
-    def log_prior_partial(self, clq, sep):
+    def log_prior_partial(self, clq, sep, extra_arg=None):
         lp = 0.0
         lp += self.log_potential(self.param_clq, len(clq) - 1.0)
         lp -= self.log_potential(self.param_sep, len(sep))
@@ -75,12 +75,12 @@ class JumpPenalty(SequentialJTDistribution):
     def __init__(self, alpha=0.25):
         self.alpha = alpha
     
-    def log_prior_partial(self, clq, sep):
-        return -self.alpha 
+    def log_prior_partial(self, clq, sep, extra_arg=None):
+        return -self.alpha * (1- extra_arg) 
 
-    def log_prior(self, clqs, seps):
-        return -self.alpha * len(clqs)
-        
+    def log_prior(self, clqs, seps, extra_arg=None):
+        return -self.alpha * (1 - extra_arg)
+
     
     def log_ratio(self,
                   old_cliques,
@@ -92,41 +92,16 @@ class JumpPenalty(SequentialJTDistribution):
         return 0.0
 
 
-class RandomWalkPenalty(SequentialJTDistribution):
-    """  Penalizes the the random walk
-    """
-    def __init__(self, alpha= 0.5):
-        self.alpha = alpha
-
-    def log_prior(self, cliques, seperators):
-        return 0.0
-
-    def log_prior_partial(self, clq, sep, **args):
-        if 'disconnect' in args:
-            return np.log(1-self.alpha)
-        return np.log(self.alpha)
-        
-    def log_ratio(self,
-                  old_cliques,
-                  old_separators,
-                  new_cliques,
-                  new_separators,
-                  old_JT,
-                  new_JT):
-        return 0.0
-
-
-
 class GraphUniform(SequentialJTDistribution):
     """  Uniform sampling over decomposable graphs, i.e pi(G) ~ 1/|jt(G)|
     """
     def __init__(self):
         None
 
-    def log_prior(self, cliques, seperators):
+    def log_prior(self, cliques, seperators, extra_arg=None):
         return 0.0
 
-    def log_prior_partial(self, clq, sep):
+    def log_prior_partial(self, clq, sep, extra_arg=None):
         return 0.0
 
     def log_ratio(self,
@@ -147,11 +122,11 @@ class EdgePenalty(SequentialJTDistribution):
     def __init__(self, alpha=0.001):
         self.alpha = alpha
 
-    def log_potential(self, c):
+    def log_potential(self, c, extra_arg=None):
         a = len(c)
         return - self.alpha * a * (a - 1.0)/2.0
 
-    def log_prior(self, cliques, seperators):
+    def log_prior(self, cliques, seperators, extra_arg=None):
         lclq = 0.0
         lsep = 0.0
         for c in cliques:
@@ -160,7 +135,7 @@ class EdgePenalty(SequentialJTDistribution):
             lsep += self.log_potential(s)
         return lclq - lsep
 
-    def log_prior_partial(self, clq, sep):
+    def log_prior_partial(self, clq, sep, extra_arg=None):
         lp = self.log_potential(clq) - self.log_potential(sep)
         return lp
         
