@@ -1,6 +1,6 @@
-"""
-Metropolis-Hastings Parallel clique sampler
-"""
+# """
+# Metropolis-Hastings Parallel clique sampler
+# """
 from multiprocessing import Process
 import multiprocessing
 
