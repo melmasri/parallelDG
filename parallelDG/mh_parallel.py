@@ -1,4 +1,4 @@
-z"""
+"""
 Metropolis-Hastings Parallel clique sampler
 """
 from multiprocessing import Process
@@ -335,6 +335,7 @@ def get_prior(graph_prior):
     sd_class, default_vals = default_parameters[graph_prior_type]
     # If more parameters are provided in graph_prior, use them instead of defaults
     parameters = graph_prior[1:] if len(graph_prior) > 1 else default_vals
+    parameters = parameters[:len(default_vals)]
     return sd_class(*map(float, parameters))
 
 
