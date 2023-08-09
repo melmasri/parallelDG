@@ -15,7 +15,6 @@ def main(trajectory_length,
          deltas=[1.0,],
          reps=1,
          seed=None,
-         reset_cache=True,
          **args):
     saved_args = locals()
     print("saved_args is", saved_args)
@@ -30,14 +29,13 @@ def main(trajectory_length,
     if not isinstance(deltas, list):
         deltas = list(deltas)
 
-    if parallel is True:
+    if parallel:
         pdg.sample_trajectories_ggm_parallel(df,
                                              n_samples=trajectory_length,
                                              randomize=randomize,
                                              delta=deltas,
                                              reps=reps,
                                              graph_prior=graph_prior,
-                                             reset_cache=reset_cache,
                                              output_directory=output_directory,
                                              output_filename=output_filename,
                                              output_format=output_format,
@@ -49,7 +47,6 @@ def main(trajectory_length,
                                             delta=deltas,
                                             reps=reps,
                                             graph_prior=graph_prior,
-                                            reset_cache=reset_cache,
                                             output_directory=output_directory,
                                             output_filename=output_filename,
                                             output_format=output_format,
@@ -124,11 +121,6 @@ if __name__ == "__main__":
                         required=False,
                         action="store_true",
                         default=False)
-    parser.add_argument('--reset_cache',
-                        required=False,
-                        default=True,
-                        action="store_true",
-                        help="Reset the cache in each iteration")
 
     args = parser.parse_args()
     main(**args.__dict__)
