@@ -416,13 +416,23 @@ def trajectory_to_file(n_samples,
     if reseed is True:
         np.random.seed()
 
+    parallel = args.get('parallel', False)
     #print (n_particles, alpha, beta, radius, n_samples, str(seqdist), reset_cache)
-    graph_trajectory = sample_trajectory_single_move(n_samples,
-                                                     randomize,
-                                                     seqdist,
-                                                     seqdist_graph,
-                                                     reset_cache=True,
-                                                     **args)
+    if parallel:
+        graph_trajectory = sample_trajectory(n_samples,
+                                             randomize,
+                                             seqdist,
+                                             seqdist_graph,
+                                             reset_cache=True,
+                                             **args)
+
+    else:
+        graph_trajectory = sample_trajectory_single_move(n_samples,
+                                                         randomize,
+                                                         seqdist,
+                                                         seqdist_graph,
+                                                         reset_cache=True,
+                                                         **args)
     output_filename = args.get("output_filename", None)
     seed = args.get('seed', int(time.time()))
     if not output_filename:
