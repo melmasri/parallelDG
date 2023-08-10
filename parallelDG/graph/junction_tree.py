@@ -237,7 +237,7 @@ class JunctionMap:
         import parallelDG.graph.decomposable as dlib
         jt = dlib.junction_tree(graph)
         randomize(jt)
-        self.t, self.t2clique = self.create_t_and_t2clique(jt, self.p)
+        self.t, self.t2clique = self.create_t_and_t2clique(jt, jt.order())
         self.node2t = self.create_node2t()
         #self.randomize()
         #self.t, self.t2clique = self.create_t_and_t2clique(jt)
