@@ -29,30 +29,17 @@ def main(trajectory_length,
     if not isinstance(deltas, list):
         deltas = list(deltas)
 
-    if parallel:
-        pdg.sample_trajectories_ggm_to_file(df,
-                                            n_samples=trajectory_length,
-                                            randomize=randomize,
-                                            delta=deltas,
-                                            reps=reps,
-                                            graph_prior=graph_prior,
-                                            output_directory=output_directory,
-                                            output_filename=output_filename,
-                                            output_format=output_format,
-                                            seed=seed,
-                                            parallel=True)
-    else:
-        pdg.sample_trajectories_ggm_to_file(df,
-                                            n_samples=trajectory_length,
-                                            randomize=randomize,
-                                            delta=deltas,
-                                            reps=reps,
-                                            graph_prior=graph_prior,
-                                            output_directory=output_directory,
-                                            output_filename=output_filename,
-                                            output_format=output_format,
-                                            seed=seed)
-
+    pdg.sample_trajectories_ggm_to_file(df,
+                                        n_samples=trajectory_length,
+                                        randomize=randomize,
+                                        delta=deltas,
+                                        reps=reps,
+                                        graph_prior=graph_prior,
+                                        output_directory=output_directory,
+                                        output_filename=output_filename,
+                                        output_format=output_format,
+                                        seed=seed,
+                                        parallel=parallel)
 
 if __name__ == "__main__":
     import argparse
