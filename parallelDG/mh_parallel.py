@@ -67,9 +67,9 @@ def sample_trajectory_single_move(n_samples,
         if i % randomize == 0:
             #pass
             #t.randomize()
-            t.randomize_at_sep_single()
+            #t.randomize_at_sep_single()
             #t.randomize_bfs()
-            #t.randomize_by_jt() 
+            t.randomize_by_jt() 
         node = np.random.randint(p)
         move_type = np.random.randint(2)
         log_p = 0.0
@@ -230,8 +230,8 @@ def sample_trajectory(n_samples,
     for i in tqdm(range(1, n_samples), desc="Metropolis-Hastings - parallel moves"):
         if i % randomize == 0:
             #t.randomize()
-            #t.randomize_by_jt()
-            t.randomize_at_sep_single()
+            t.randomize_by_jt()
+            #t.randomize_at_sep_single()
         node = np.random.randint(p)
         move_type = np.random.randint(2)
         log_p = 0.0
