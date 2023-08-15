@@ -196,7 +196,7 @@ class Trajectory:
             from_index (int): Burn-in period, default=0.
         """
         if not self._jtsize and self.jt_trajectory:
-            self._jtsize = [g.size() if g else None for g in self.jt_trajectory[from_index:]]
+            self._jtsize = [g.number_of_edges() if g else None for g in self.jt_trajectory[from_index:]]
         return pd.Series(self._jtsize).fillna(method='ffill')
         
     def size(self, from_index=0):
@@ -207,7 +207,7 @@ class Trajectory:
         if not self._size:
             if not self.trajectory:
                 self.set_graph_trajectories()
-            self._size = [g.size() if g else None for g in self.trajectory[from_index:]]
+            self._size = [g.number_of_edges() if g else None for g in self.trajectory[from_index:]]
         return pd.Series(self._size).fillna(method='ffill')
 
     def write_file(self, filename=None, optional={}):
