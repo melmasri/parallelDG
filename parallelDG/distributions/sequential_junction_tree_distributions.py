@@ -75,10 +75,10 @@ class JumpPenalty(SequentialJTDistribution):
     def __init__(self, alpha=0.25):
         self.alpha = alpha
     
-    def log_prior_partial(self, clq, sep, extra_arg=None):
+    def log_prior_partial(self, clq, sep, extra_arg=1):
         return -self.alpha * (1- extra_arg) 
 
-    def log_prior(self, clqs, seps, extra_arg=None):
+    def log_prior(self, clqs, seps, extra_arg=1):
         return -self.alpha * (1 - extra_arg)
 
     
