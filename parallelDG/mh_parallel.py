@@ -114,14 +114,11 @@ def sample_trajectory_single_move(n_samples,
             if subtree_n_nodes == 0:
                 log_p1 += sd.log_likelihood_partial([frozenset([node])], {S: [(Cadj, C)]})
                 log_g1 += sd_graph.log_prior_partial(frozenset([node]), S, 1-move_type)
-
                 
             ratios = (log_p2 - log_p1, log_g2 - log_g1, log_q2 - log_q1)
-            acc_ratios.append(ratios)
-            alpha = min(1, np.exp(np.sum(ratios)))
-           
+            #acc_ratios.append(ratios)
             k += int(1)
-            if np.random.uniform() <= alpha:
+            if np.random.uniform() <= min(1, np.exp(np.sum(ratios))):
                 log_p += (log_p2 - log_p1) + (log_g2 - log_g1)
                 update_moves.append((i, k, move_type, {node}, (Cnew, C, Cadj)))
                 #t_moves.append((i, k, move_type, node, U))
@@ -161,10 +158,9 @@ def sample_trajectory_single_move(n_samples,
                 log_g2 += sd_graph.log_prior_partial(frozenset([node]), Snew, 1)
                 
             ratios = (log_p2 - log_p1, log_g2 - log_g1, log_q2 - log_q1) 
-            acc_ratios.append(ratios)
-            alpha = min(1, np.exp(np.sum(ratios)))
+            #acc_ratios.append(ratios)
             k += int(1)
-            if np.random.uniform() <= alpha:
+            if np.random.uniform() <= min(1, np.exp(np.sum(ratios))):
                 log_p += (log_p2 - log_p1) + (log_g2 - log_g1)
                 update_moves.append((i, k, move_type, {node}, (Cnew, C, Cadj)))
                 #t_moves.append((i, k, move_type, node, U))
@@ -190,7 +186,6 @@ def sample_trajectory(n_samples,
                       init_graph=None,
                       **args):
     seed = args.get('seed', int(time.time()))
-    reduced_jt = args.get('reduced_jt', False)
     np.random.seed(seed)
     if init_graph:
         graph = init_graph.copy()
@@ -207,7 +202,7 @@ def sample_trajectory(n_samples,
     sd.cache = {}
     t = jtlib.JunctionMap(jt)
     log_prob_traj = [0] * n_samples
-    p = t.p
+    p = int(t.p)
     gtraj = mcmctraj.Trajectory()
     gtraj.trajectory_type = "Latent Juction tree"
     gtraj.set_sampling_method({"method": "Metropolis-Hastings - parallel sampler",
@@ -268,10 +263,9 @@ def sample_trajectory(n_samples,
                     log_g1 += sd_graph.log_prior_partial(frozenset([node]), S, 1)
                     
                 ratios = (log_p2 - log_p1, log_g2 - log_g1, 0)
-                acc_ratios.append((i,) + ratios)
-                alpha = min(1, np.exp(np.sum(ratios)))
+                #acc_ratios.append((i,) + ratios)
                 k += int(1)
-                if np.random.uniform() <= alpha:
+                if np.random.uniform() <= min(1, np.exp(np.sum(ratios))):
                     log_p += (log_p2 - log_p1) + (log_g2 - log_g1)
                     update_moves.append((i, k, move_type, {node}, (Cnew, C, Cadj)))
                     t.connect(U, node)
@@ -301,10 +295,9 @@ def sample_trajectory(n_samples,
                     log_g2 += sd_graph.log_prior_partial(frozenset([node]), Snew, 1)
                 
                 ratios = (log_p2 - log_p1, log_g2 - log_g1, log_q)
-                acc_ratios.append((i, ) + ratios)
-                alpha = min(1, np.exp(np.sum(ratios)))
+                #acc_ratios.append((i, ) + ratios)
                 k += int(1)
-                if np.random.uniform() <= alpha:    
+                if np.random.uniform() <= min(1, np.exp(np.sum(ratios))):    
                     log_p += (log_p2 - log_p1) + (log_g2 - log_g1)
                     update_moves.append((i, k, move_type, {node}, (Cnew, C, Cadj)))
                     t.disconnect(U, node)
@@ -380,7 +373,8 @@ def sample_trajectory_ggm(dataframe,
     sd.init_model(np.asmatrix(dataframe), D, delta, cache = {})
     sd_graph = get_prior(graph_prior)
 
-    if 'single_move' in args:
+    parallel = args.get('parallel', False)
+    if not parallel:
         traj = sample_trajectory_single_move(n_samples,
                                              randomize, sd,
                                              sd_graph,
