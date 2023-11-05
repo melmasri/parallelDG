@@ -18,7 +18,7 @@ def main(trajectory_length,
          **args):
     saved_args = locals()
     print("saved_args is", saved_args)
-    df = pd.read_csv(data_filename, sep=',', header=None)
+    df = pd.read_csv(data_filename)
 
     if not isinstance(trajectory_length, list):
         trajectory_length = list(trajectory_length)
