@@ -18,7 +18,7 @@ def main(trajectory_length,
     if seed is not None:
         np.random.seed(seed)
 
-    df = pd.read_csv(data_filename, sep=',', header=None)
+    df = pd.read_csv(data_filename)
     if parallel is True:
         mh_greenthomas.sample_trajectories_ggm_parallel(df,
                                                         trajectory_length,
